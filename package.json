@@ -1,0 +1,15 @@
+{
+  "name": "net.yozolab.xestrel",
+  "displayName": "xestrel",
+  "version": "0.0.0",
+  "description": "Per-avatar Material isolation for VRChat with on-demand Texture isolation. Bulk-copies referenced Materials into Assets/Xestrel/<AvatarName>/Materials/ and rewires Renderers; individual Textures are copied on demand from the editor window into Assets/Xestrel/<AvatarName>/Textures/. The state is tracked on a VRC IEditorOnly component so it is stripped on upload.",
+  "unity": "2022.3",
+  "author": {
+    "name": "Yozolab"
+  },
+  "license": "MIT",
+  "vpmDependencies": {
+    "com.vrchat.avatars": ">=3.5.0"
+  },
+  "type": "tool"
+}

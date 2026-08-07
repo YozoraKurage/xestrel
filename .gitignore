@@ -1,0 +1,25 @@
+# Unity generated
+*.csproj
+*.sln
+*.suo
+*.user
+Library/
+Temp/
+Obj/
+Build/
+Builds/
+Logs/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vs/
+.vscode/
+
+# User-provided files for repro (never commit user data; see CLAUDE.md)
+temp
+temp.meta
+
+# Meta files belong in version control (Unity convention).
+# Do not ignore *.meta.
