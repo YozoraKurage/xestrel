@@ -22,6 +22,7 @@ namespace Xestrel.Isolation
         public static Texture IsolateProperty(XestrelMaterialIsolation state, Material copyMaterial, string propName)
         {
             if (state == null || copyMaterial == null || string.IsNullOrEmpty(propName)) return null;
+            WorkspaceManifests.HealWorkspaceName(state);
 
             var current = copyMaterial.GetTexture(propName);
             if (current == null) return null;
@@ -51,6 +52,7 @@ namespace Xestrel.Isolation
                 copy = TextureCopyFactory.Create(current, dst);
                 if (copy == null) return current;
 
+                Undo.RecordObject(state, "Xestrel Isolate Texture");
                 if (state.textureBindings == null)
                     state.textureBindings = new List<XestrelTextureBinding>();
                 state.textureBindings.Add(new XestrelTextureBinding { original = current, copy = copy });
@@ -60,6 +62,7 @@ namespace Xestrel.Isolation
             Undo.RecordObject(copyMaterial, "Xestrel Isolate Texture");
             copyMaterial.SetTexture(propName, copy);
             EditorUtility.SetDirty(copyMaterial);
+            WorkspaceManifests.Sync(state);
             AssetDatabase.SaveAssets();
             return copy;
         }

@@ -27,6 +27,8 @@ namespace Xestrel.Isolation
             AnimatorIsolator.Restore(state);
             TextureIsolator.Restore(state);
             MaterialIsolator.Restore(state);
+            WorkspaceManifests.Sync(state);
+            AssetDatabase.SaveAssets();
         }
 
         /// <summary>
@@ -59,6 +61,10 @@ namespace Xestrel.Isolation
             if (removed > 0)
             {
                 EditorUtility.SetDirty(state);
+                // The manifest's guidHistory keeps the pruned copy→original GUID pairs,
+                // so the relationship stays reconstructible if the asset comes back.
+                WorkspaceManifests.Sync(state);
+                AssetDatabase.SaveAssets();
                 XestrelLog.Info(XestrelLogCategory.Isolate,
                     $"Pruned {removed} dead binding(s) on '{state.avatarName}'");
             }

@@ -1,54 +1,66 @@
 # xestrel
 
-Per-avatar Material isolation for VRChat avatar projects. 日本語: [README.ja.md](README.ja.md)
+VRChat アバタープロジェクト向けの、アバター単位マテリアル分離ツール。
 
-When you keep multiple avatars in one Unity project, shared `Material` / `Texture` references mean a tweak made for avatar A silently shows up on avatar B. xestrel walks a selected avatar's `Renderer` hierarchy and:
+1 つの Unity プロジェクトに複数のアバターを入れていると、`Material` / `Texture` が共有参照になっているせいで、アバター A のために調整した変更がアバター B にも勝手に反映されてしまいます。xestrel は選択したアバターの `Renderer` 階層を走査して:
 
-1. **Materials**: replaces each referenced `Material` with a per-avatar copy under `Assets/Xestrel/<AvatarName>/Materials/` and rewires the `Renderer.sharedMaterials` arrays. This runs in bulk when you press **Isolate** (the button shows how many shared materials it would copy).
-2. **Textures**: per texture property, on demand. The window shows each copy material's texture slots; press the per-row **Isolate** button to copy that single `Texture` into `Assets/Xestrel/<AvatarName>/Textures/` and point the property at the copy, or **Isolate All Textures** to do every slot of a material at once. Unisolated textures keep referring to the shared original; isolated slots get a per-row **Restore** button.
-3. **Animators**: per `AnimatorController`, on demand. The window's *Animators* section lists every `VRCAvatarDescriptor` playable layer that still points at a shared controller with a one-click **Isolate** button (you can also drop any controller into the object field). The controller is copied to `Assets/Xestrel/<AvatarName>/Animators/`, every referenced `AnimationClip` (states, sub-state machines, blend trees) is copied to `Assets/Xestrel/<AvatarName>/Animations/`, the controller copy is rewired to use the clip copies, and if the original controller is referenced from the avatar's `VRCAvatarDescriptor` playable layers, those references are swapped to the copy.
+1. **マテリアル**: 参照されている各 `Material` を `Assets/Xestrel/<アバター名>/Materials/` 以下のアバター専用コピーに置き換え、`Renderer.sharedMaterials` を差し替えます。**Isolate** ボタンで一括実行されます(ボタンにはコピー対象の共有マテリアル数が表示されます)。
+2. **テクスチャ**: テクスチャプロパティ単位・オンデマンド。ウィンドウにコピー元マテリアルのテクスチャスロットが並ぶので、行ごとの **Isolate** ボタンでその 1 枚だけを `Assets/Xestrel/<アバター名>/Textures/` にコピーして差し替えます。**Isolate All Textures** でマテリアル内の全スロットを一括分離もできます。分離していないテクスチャは共有元を参照したままで、分離済みスロットには **Restore** ボタンが出ます。
+3. **アニメーター**: `AnimatorController` 単位・オンデマンド。ウィンドウの *Animators* セクションには、まだ共有コントローラーを指している `VRCAvatarDescriptor` の Playable Layer が一覧表示され、ワンクリックで **Isolate** できます(オブジェクトフィールドに任意のコントローラーを入れることも可能)。コントローラーは `Assets/Xestrel/<アバター名>/Animators/` へ、参照されている `AnimationClip`(ステート・サブステートマシン・ブレンドツリー)は `Assets/Xestrel/<アバター名>/Animations/` へコピーされ、コピー側コントローラーはクリップコピーを使うよう書き換えられます。元のコントローラーが Descriptor の Playable Layer から参照されていた場合は、その参照もコピーに差し替わります。
 
-The original assets are left untouched. A `XestrelMaterialIsolation` component is added to the avatar root to remember every `original → copy` mapping. It implements `VRC.SDKBase.IEditorOnly`, so it is stripped on VRChat upload.
+元のアセットには一切手を付けません。アバタールートに `XestrelMaterialIsolation` コンポーネントが追加され、すべての `元 → コピー` の対応を記録します。`VRC.SDKBase.IEditorOnly` を実装しているため、VRChat アップロード時には除去されます。
 
-## Status
+## 状態
 
-Unity 2022.3 LTS, VRChat Avatars SDK 3.5+. No NDMF / Modular Avatar / Avatar Optimizer integration — xestrel only touches `Renderer.sharedMaterials`.
+Unity 2022.3 LTS、VRChat Avatars SDK 3.5+。NDMF / Modular Avatar / Avatar Optimizer との連携はありません — xestrel が触るのは `Renderer.sharedMaterials` だけです。
 
-## Install
+## インストール
 
-Copy or symlink this directory into your Unity project at `Packages/net.yozolab.xestrel/`. Open the Editor; the package compiles into `Xestrel.Runtime.dll` and `Xestrel.Editor.dll`.
+このディレクトリを Unity プロジェクトの `Packages/net.yozolab.xestrel/` にコピーまたはシンボリックリンクしてください。エディタを開くと `Xestrel.Runtime.dll` と `Xestrel.Editor.dll` にコンパイルされます。
 
-## Use
+## 使い方
 
-1. Drop an avatar prefab into a scene.
-2. Right-click the avatar root in the Hierarchy → **Xestrel → Isolate Materials**, or open **Window → Xestrel → Asset Isolation** and press **Isolate**. The window follows your Hierarchy selection onto avatars; use the lock toggle next to the Avatar field to pin it.
-3. Material copies appear under `Assets/Xestrel/<AvatarName>/Materials/` and the avatar's renderers are rewired to them. The **Folder** button pings that folder in the Project window.
-4. The window is tabbed: **Materials** (per-material bindings), **Textures** (a flat list of every texture the copy materials reference), **Animators**, and **Not Isolated** (everything still shared, with the pending count in the tab label).
-5. On the *Materials* tab, expand a binding. For any texture slot you want to make per-avatar, press the row's **Isolate** button — that texture is copied to `Assets/Xestrel/<AvatarName>/Textures/` and the property is repointed at the copy. **Isolate All Textures** does every slot at once. Isolated slots are marked with ● and can be reverted individually with **Restore**.
-6. On the *Textures* tab, each texture shows its thumbnail, isolation status, and every material slot that uses it; **Isolate** / **Restore** there rewires all of those slots at once.
-7. The *Not Isolated* tab lists shared materials (with renderer slot counts and a one-click per-material **Isolate**), shared textures, and shared descriptor playable layers.
-8. Re-running Isolate is a no-op for materials; texture isolation never happens automatically.
-9. Press **Restore** on the inspector or window (with confirmation) to revert texture properties to their originals (textures first) and then point every renderer back at the shared materials. A single material can be reverted with its **Restore Material** button; the copy asset always stays on disk.
-10. If you delete copy assets from the Project window, the window/inspector show a **Prune** button that drops the now-dead bindings.
+1. アバタープレハブをシーンに配置します。
+2. Hierarchy でアバタールートを右クリック → **Xestrel → Isolate Materials**、または **Window → Xestrel → Asset Isolation** を開いて **Isolate** を押します。ウィンドウは Hierarchy の選択に追従してアバターを切り替えます。固定したい場合は Avatar フィールド横のロックトグルを使ってください。
+3. マテリアルコピーが `Assets/Xestrel/<アバター名>/Materials/` に作られ、レンダラーが差し替わります。**Folder** ボタンで Project ウィンドウ内のそのフォルダーを表示できます。
+4. ウィンドウはタブ構成です: **Materials**(マテリアル単位のバインディング)、**Textures**(コピー側マテリアルが参照する全テクスチャの一覧)、**Animators**、**Isolated**(xestrel がこのアバターに行った変更の一覧 — マテリアル / テクスチャ / アニメーター / クリップに加え、どこからも参照されなくなった*未使用コピー*も表示)、**Additions**(ベース Prefab に対して何が追加されたか: 追加された Prefab インスタンスやシーンオブジェクトの一覧と追加単位の Isolate、追加 / 削除されたコンポーネント。Unpack 済みアバターでは子 Prefab インスタンスの一覧に切り替わります)、**Not Isolated**(まだ共有のままのアセット一覧。タブラベルに未分離数が表示されます)。
+5. *Materials* タブでバインディングを展開します。アバター専用にしたいテクスチャスロットの **Isolate** ボタンを押すと、そのテクスチャが `Assets/Xestrel/<アバター名>/Textures/` にコピーされて差し替わります。**Isolate All Textures** で全スロット一括も可能。分離済みスロットは ● マーク付きで、**Restore** で個別に戻せます。
+6. *Textures* タブでは各テクスチャのサムネイル・分離状態・使用箇所(どのマテリアルのどのスロットか)が一覧できます。ここでの **Isolate** / **Restore** は、そのテクスチャを使う全スロットを一括で差し替え/復元します。
+7. *Not Isolated* タブには、共有のままのマテリアル(使用スロット数付き・ワンクリックで個別分離)、テクスチャ、Descriptor の Playable Layer がまとめて表示されます。
+8. Isolate の再実行はマテリアルに対しては no-op です。テクスチャ分離が自動で走ることはありません。
+9. インスペクターまたはウィンドウの **Restore**(確認ダイアログ付き)で、テクスチャプロパティを先に元へ戻し、その後すべてのレンダラーを共有マテリアルへ戻します。マテリアル 1 つだけ戻したい場合は **Restore Material** ボタンを使ってください。コピーアセットは常にディスクに残ります。
+10. Project ウィンドウでコピーアセットを削除した場合、ウィンドウ / インスペクターに **Prune** ボタンが表示され、参照切れになったバインディングを掃除できます。
 
-## Workspaces and renaming
+## 依存ブラウザ
 
-- The folder name under `Assets/Xestrel/` is fixed the first time an avatar is isolated. Renaming the GameObject afterwards is safe: existing and new copies keep going to the original folder, and the status line tells you which one.
-- If the folder name is already taken (a same-named avatar in another scene, or leftovers from a component you removed), a ` (n)` suffix is chosen — so placing the same prefab into several scenes, or twice into one scene, gives each instance its own independent workspace.
-- **Deriving a variant that inherits your edits**: duplicate the isolated avatar in the Hierarchy (Ctrl+D). The duplicate initially shares the same copy assets, so the window shows a warning with a **Fork** button — press it on the duplicate. Fork re-copies every bound material / texture / animator / clip into a fresh workspace folder (all edits made so far carry over), rewires the duplicate to the forks, and keeps each binding pointing at the true shared original, so Restore still works per avatar. The source avatar is never touched. For a from-scratch variant, place a fresh prefab instance instead and isolate it.
+**Window → Xestrel → Dependencies**(または分離ウィンドウの **Deps** ボタン)で、アバターの依存関係がインデント式のツリーで開きます。第1リングは汎用的に発見されます — 階層内の全コンポーネントのシリアライズ済みオブジェクト参照をすべて走査するため、Modular Avatar / VRCFury / オーディオ / メッシュ / メニューへの参照も型ごとの対応なしで現れます。各行の **▸ n** ボタンでそのアセット自身の直接依存が展開されます(インポートパイプライン経由なので軽量)。種別トグル(Mat / Tex / Mesh / Anim / Clip / Menu / Shader / Prefab / Other)、`Assets/` 外を隠す **No Pkg** トグル、検索ハイライトで一覧を読みやすく保てます。分離状態は行頭の色ドットです: 橙=まだ共有(隔離可能)/ 緑=隔離済みコピー / 赤=他ワークスペースのマニフェストも参照しているコピー(バッジにワークスペース名を表示。未ロードのシーンでも検出)/ グレー=xestrel の管理対象外。各行にはプライマリアバターに対する **Isolate** / **Restore** ボタンがインラインで付き、名前クリックで Ping します。**Add Selected** で複数のアバターをルートに追加でき、複数のアバターから参照されているアセットには `×n avatars` バッジが付きます。
 
-## Copies
+## ワークスペースとリネーム
 
-- Material copies are plain `.mat` assets created via `AssetDatabase.CopyAsset` (not Material Variants). They are fully independent of the source.
-- Texture copies use `AssetDatabase.CopyAsset` so importer settings (compression, sRGB, mipmaps, etc.) carry over. Textures that are sub-assets of a model (e.g. embedded inside an FBX) or that have no asset on disk (e.g. `RenderTexture`) are skipped with a warning — their references on the copy material are left pointing at the original.
-- Animator copies use `AssetDatabase.CopyAsset` so all sub-assets (states, blend trees, transitions) come along; xestrel then walks the copy and rewrites every `Motion` reference to a clip copy. Embedded clips inside FBX / model assets and `AnimatorOverrideController` inputs are skipped.
+- `Assets/Xestrel/` 以下のフォルダ名は、アバターを最初に分離した時点で確定します。以後 GameObject をリネームしても安全で、既存・新規のコピーは元のフォルダに入り続けます(どのフォルダかはステータス行に表示されます)。
+- フォルダ名がすでに使われている場合(別シーンの同名アバター、コンポーネント削除後の残骸など)は ` (n)` サフィックスが付きます。同じプレハブを複数のシーンに置いたり、1つのシーンに2体置いたりしても、それぞれが独立したワークスペースになります。
+- **編集を引き継いだ派生を作る**: ウィンドウの **Fork** ボタンを押すと、アバターをシーン内で複製し(プレハブ接続は維持)、その場で複製側に独立コピーを持たせます。手動で複製(Ctrl+D)しても構いません: 複製直後は同じコピーアセットを共有した状態なので、ウィンドウに警告と **Fork** ボタンが表示されます — 複製した側で Fork を押してください。バインドされたマテリアル / テクスチャ / アニメーター / クリップがすべて新しいワークスペースフォルダに再コピーされ(それまでの編集内容ごと引き継がれます)、複製側だけがフォークに配線し直されます。各バインディングは本当の共有元を指し続けるので、Restore もアバターごとに正しく動きます。元のアバターには一切触りません。ゼロから改変を始めたい場合は、これまでどおり元のプレハブを新しく置いて分離してください。
 
-## Layout
+## 復旧と安全性
 
-- `Runtime/` — `XestrelMaterialIsolation` MonoBehavior (IEditorOnly) with material / texture / animator / clip bindings
-- `Editor/Core/` — Logging, path helpers
-- `Editor/Detection/` — Avatar root resolution (VRCAvatarDescriptor)
-- `Editor/Isolation/` — Material / Texture / Animator copy factories and isolator services
-- `Editor/UI/` — EditorWindow + Hierarchy context menu
-- `Editor/Inspector/` — Custom inspector for the MonoBehavior
-- `Editor.Tests/` — Editor Test Runner suite
+- 各ワークスペースには、コンポーネントのバインディングを変更のたびにミラーするマニフェストアセット `Assets/Xestrel/<AvatarName>/XestrelWorkspace.asset` も保存されます。正はあくまでアバター上のコンポーネントで、マニフェストはコンポーネントを失っても original → copy の対応が生き残るための保険です。
+- プレハブの **Revert All** やシーンの事故などでコンポーネントが消えても、Renderer がコピーを参照したままであればウィンドウが検知し、マニフェストからコンポーネントを再構築する **Recover** ボタンを表示します。
+- マニフェストは、これまでに記録されたすべての copy → original ペアの GUID 履歴を恒久的に保持します。アセットが行方不明の間に Prune されたバインディングも、後から関係を復元できます。
+- `Assets/Xestrel/` 以下のワークスペースフォルダをリネームしても自動で追従します。ワークスペースは新しいフォルダ名を引き継ぎ、新規コピーも既存コピーの隣に入り続けます。
+- アバターのプレハブ**アセット**自体が Xestrel コピーを参照している場合(Renderer / Descriptor のオーバーライドをプレハブに Apply した場合)、ウィンドウが警告します — その状態では、全シーンのそのプレハブの全インスタンスがコピーを使うことになります。
+
+## コピーの仕様
+
+- マテリアルコピーは `AssetDatabase.CopyAsset` で作られる素の `.mat` アセットです(Material Variant ではありません)。元とは完全に独立します。
+- テクスチャコピーも `AssetDatabase.CopyAsset` を使うため、インポーター設定(圧縮・sRGB・ミップマップ等)が引き継がれます。モデルのサブアセット(FBX 埋め込みなど)やディスク上にアセットがないもの(`RenderTexture` など)は警告付きでスキップされ、コピー側マテリアルの参照は元のままになります。
+- アニメーターコピーも `AssetDatabase.CopyAsset` を使うのでサブアセット(ステート・ブレンドツリー・トランジション)ごとコピーされ、その後 xestrel がコピーを走査してすべての `Motion` 参照をクリップコピーに書き換えます。FBX / モデルアセット埋め込みのクリップと `AnimatorOverrideController` は対象外です。
+
+## 構成
+
+- `Runtime/` — マテリアル / テクスチャ / アニメーター / クリップのバインディングを持つ `XestrelMaterialIsolation` MonoBehavior(IEditorOnly)
+- `Editor/Core/` — ログ・パスヘルパー
+- `Editor/Detection/` — アバタールート解決(VRCAvatarDescriptor)
+- `Editor/Isolation/` — マテリアル / テクスチャ / アニメーターのコピーファクトリと分離サービス
+- `Editor/UI/` — EditorWindow + Hierarchy コンテキストメニュー
+- `Editor/Inspector/` — MonoBehavior 用カスタムインスペクター
+- `Tests/` — Editor Test Runner スイート

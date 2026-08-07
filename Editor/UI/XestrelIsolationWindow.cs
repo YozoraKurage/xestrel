@@ -17,12 +17,14 @@ namespace Xestrel.UI
         private const int TabMaterials = 0;
         private const int TabTextures = 1;
         private const int TabAnimators = 2;
-        private const int TabPending = 3;
+        private const int TabIsolated = 3;
+        private const int TabAdditions = 4;
+        private const int TabPending = 5;
 
         private GameObject _avatar;
         private bool _lockAvatar;
         private int _tab;
-        private readonly Vector2[] _scrolls = new Vector2[4];
+        private readonly Vector2[] _scrolls = new Vector2[6];
         private string _search = string.Empty;
         private readonly HashSet<Material> _expanded = new HashSet<Material>();
         private RuntimeAnimatorController _pendingAnimator;
@@ -47,6 +49,25 @@ namespace Xestrel.UI
         // Another avatar in the scene whose bindings share copy assets with ours —
         // almost always a duplicated already-isolated avatar. Edits would bleed.
         private XestrelMaterialIsolation _sharesCopiesWith;
+        // Workspace manifests offered for recovery when the renderers point at copies
+        // but the state component is gone (prefab revert, scene mishap).
+        private readonly List<XestrelWorkspaceManifest> _recoverCandidates =
+            new List<XestrelWorkspaceManifest>();
+        private int _recoverIndex;
+        // The avatar's prefab *asset* references Xestrel copies — overrides were applied
+        // to the prefab, so every instance in every scene uses those copies.
+        private bool _prefabAssetHasCopies;
+        // Copies in the workspace folder that nothing references or tracks any more.
+        private List<Object> _unusedCopies = new List<Object>();
+        // What was added to the avatar relative to its base prefab (derived, never stored).
+        private AvatarAdditionsReport _additionsReport = new AvatarAdditionsReport();
+        private sealed class AdditionRow
+        {
+            public GameObject go;
+            public string sourcePath; // prefab asset path, or null for scene-only objects
+            public List<KeyValuePair<Material, int>> pending;
+        }
+        private readonly List<AdditionRow> _additionRows = new List<AdditionRow>();
 
         [MenuItem("Window/Xestrel/Asset Isolation")]
         public static void Open()
@@ -126,10 +147,124 @@ namespace Xestrel.UI
 
         private void RebuildCaches()
         {
+            WorkspaceManifests.HealWorkspaceName(CurrentState);
             _pendingMaterials = MaterialIsolator.CollectPendingMaterials(_avatar);
             RebuildTextureEntries();
             RebuildPendingLayers();
             DetectSharedCopies();
+            RebuildRecoverCandidates();
+            DetectPrefabAssetCopies();
+            _unusedCopies = WorkspaceAudit.CollectUnusedCopies(CurrentState);
+            RebuildAdditions();
+        }
+
+        private void RebuildAdditions()
+        {
+            _additionRows.Clear();
+            _additionsReport = AvatarAdditions.Scan(_avatar);
+            foreach (var go in _additionsReport.addedObjects)
+            {
+                if (go == null) continue;
+                string sourcePath = null;
+                if (PrefabUtility.IsAnyPrefabInstanceRoot(go))
+                {
+                    var src = PrefabUtility.GetCorrespondingObjectFromSource(go);
+                    if (src != null) sourcePath = AssetDatabase.GetAssetPath(src);
+                }
+                _additionRows.Add(new AdditionRow
+                {
+                    go = go,
+                    sourcePath = sourcePath,
+                    pending = MaterialIsolator.CollectPendingMaterials(go),
+                });
+            }
+        }
+
+        private void RebuildRecoverCandidates()
+        {
+            _recoverCandidates.Clear();
+            if (_avatar == null || CurrentState != null) return;
+            var referenced = CollectReferencedWorkspaceFolders();
+            // No renderer/descriptor slot points at a copy → this is a fresh avatar,
+            // not a lost-component case; don't offer recovery.
+            if (referenced.Count == 0) return;
+
+            var all = WorkspaceManifests.FindAll();
+            foreach (var m in all)
+            {
+                var folder = WorkspaceManifests.FolderNameOf(m) ?? m.avatarName;
+                if (folder != null && referenced.Contains(folder)) _recoverCandidates.Add(m);
+            }
+            foreach (var m in all)
+            {
+                if (!_recoverCandidates.Contains(m)) _recoverCandidates.Add(m);
+            }
+            if (_recoverIndex >= _recoverCandidates.Count) _recoverIndex = 0;
+        }
+
+        private HashSet<string> CollectReferencedWorkspaceFolders()
+        {
+            var result = new HashSet<string>();
+            foreach (var r in _avatar.GetComponentsInChildren<Renderer>(true))
+            {
+                foreach (var m in r.sharedMaterials) AddWorkspaceOf(m, result);
+            }
+            var desc = _avatar.GetComponent<VRCAvatarDescriptor>();
+            if (desc != null)
+            {
+                if (desc.baseAnimationLayers != null)
+                    foreach (var l in desc.baseAnimationLayers) AddWorkspaceOf(l.animatorController, result);
+                if (desc.specialAnimationLayers != null)
+                    foreach (var l in desc.specialAnimationLayers) AddWorkspaceOf(l.animatorController, result);
+            }
+            return result;
+        }
+
+        private static void AddWorkspaceOf(Object asset, HashSet<string> result)
+        {
+            if (asset == null) return;
+            var path = AssetDatabase.GetAssetPath(asset);
+            if (!IsolationPaths.IsUnderIsolationRoot(path)) return;
+            var rest = path.Substring(IsolationPaths.Root.Length + 1);
+            var slash = rest.IndexOf('/');
+            if (slash > 0) result.Add(rest.Substring(0, slash));
+        }
+
+        private void DetectPrefabAssetCopies()
+        {
+            _prefabAssetHasCopies = false;
+            if (_avatar == null || !PrefabUtility.IsPartOfPrefabInstance(_avatar)) return;
+            var source = PrefabUtility.GetCorrespondingObjectFromSource(_avatar);
+            if (source == null) return;
+
+            foreach (var r in source.GetComponentsInChildren<Renderer>(true))
+            {
+                foreach (var m in r.sharedMaterials)
+                {
+                    if (m != null && IsolationPaths.IsUnderIsolationRoot(AssetDatabase.GetAssetPath(m)))
+                    {
+                        _prefabAssetHasCopies = true;
+                        return;
+                    }
+                }
+            }
+            var desc = source.GetComponent<VRCAvatarDescriptor>();
+            if (desc == null) return;
+            _prefabAssetHasCopies =
+                AnyLayerUnderIsolationRoot(desc.baseAnimationLayers) ||
+                AnyLayerUnderIsolationRoot(desc.specialAnimationLayers);
+        }
+
+        private static bool AnyLayerUnderIsolationRoot(VRCAvatarDescriptor.CustomAnimLayer[] layers)
+        {
+            if (layers == null) return false;
+            foreach (var l in layers)
+            {
+                if (l.animatorController != null &&
+                    IsolationPaths.IsUnderIsolationRoot(AssetDatabase.GetAssetPath(l.animatorController)))
+                    return true;
+            }
+            return false;
         }
 
         private void DetectSharedCopies()
@@ -245,6 +380,8 @@ namespace Xestrel.UI
                 new GUIContent("Materials"),
                 new GUIContent("Textures"),
                 new GUIContent("Animators"),
+                new GUIContent("Isolated"),
+                new GUIContent("Additions"),
                 new GUIContent(pendingTotal > 0 ? $"Not Isolated ({pendingTotal})" : "Not Isolated"),
             };
             _tab = GUILayout.Toolbar(_tab, tabs, GUILayout.Height(22f));
@@ -255,6 +392,8 @@ namespace Xestrel.UI
                 case TabMaterials: DrawMaterialsTab(); break;
                 case TabTextures: DrawTexturesTab(); break;
                 case TabAnimators: DrawAnimatorsTab(); break;
+                case TabIsolated: DrawIsolatedTab(); break;
+                case TabAdditions: DrawAdditionsTab(); break;
                 case TabPending: DrawPendingTab(); break;
             }
         }
@@ -265,8 +404,17 @@ namespace Xestrel.UI
         {
             var rect = EditorGUILayout.GetControlRect(false, 28f);
             EditorGUI.DrawRect(rect, new Color(0f, 0f, 0f, 0.18f));
-            var labelRect = new Rect(rect.x + 10f, rect.y + 6f, rect.width - 20f, rect.height - 8f);
+            var labelRect = new Rect(rect.x + 10f, rect.y + 6f, rect.width - 90f, rect.height - 8f);
             GUI.Label(labelRect, "Asset Isolation", EditorStyles.boldLabel);
+            var btnRect = new Rect(rect.xMax - 70f, rect.y + 4f, 60f, rect.height - 8f);
+            using (new EditorGUI.DisabledScope(_avatar == null))
+            {
+                if (GUI.Button(btnRect, new GUIContent("Deps",
+                        "Open the dependency browser for this avatar"), EditorStyles.miniButton))
+                {
+                    XestrelDependencyWindow.OpenFor(_avatar);
+                }
+            }
         }
 
         private void DrawAvatarSection()
@@ -311,6 +459,22 @@ namespace Xestrel.UI
                             Isolator.Restore(CurrentState);
                             _cachesDirty = true;
                         }
+                        using (new EditorGUI.DisabledScope(!HasForkableBindings(CurrentState)))
+                        {
+                            if (GUILayout.Button(new GUIContent("Fork",
+                                    "Duplicate this avatar and give the duplicate its own independent copies (current edits are inherited)"),
+                                GUILayout.Height(24), GUILayout.Width(60)) && ConfirmDuplicateFork())
+                            {
+                                var dup = WorkspaceForker.DuplicateAndFork(CurrentState);
+                                if (dup != null)
+                                {
+                                    Selection.activeGameObject = dup;
+                                    if (!_lockAvatar) _avatar = dup;
+                                }
+                                _cachesDirty = true;
+                                GUIUtility.ExitGUI();
+                            }
+                        }
                         if (GUILayout.Button(new GUIContent("Folder",
                                 "Ping this avatar's copy folder in the Project window"),
                             GUILayout.Height(24), GUILayout.Width(60)))
@@ -323,6 +487,20 @@ namespace Xestrel.UI
                 EditorGUILayout.Space(2f);
                 DrawStatus();
             }
+        }
+
+        private static bool HasForkableBindings(XestrelMaterialIsolation state) =>
+            state != null &&
+            ((state.bindings?.Count ?? 0) > 0 || (state.animatorBindings?.Count ?? 0) > 0);
+
+        private bool ConfirmDuplicateFork()
+        {
+            return EditorUtility.DisplayDialog(
+                "Xestrel — Fork",
+                $"Duplicate \"{_avatar.name}\" and give the duplicate its own independent copies " +
+                "under a new folder in Assets/Xestrel/?\n\n" +
+                "All edits made so far are inherited. The original avatar and its workspace are not modified.",
+                "Fork", "Cancel");
         }
 
         private bool ConfirmRestoreAll()
@@ -359,9 +537,20 @@ namespace Xestrel.UI
                 EditorGUILayout.HelpBox("Select an avatar in the scene.", MessageType.Info);
                 return;
             }
+            if (_prefabAssetHasCopies)
+            {
+                EditorGUILayout.HelpBox(
+                    "This avatar's prefab asset itself references Xestrel copies — renderer or " +
+                    "descriptor overrides were applied to the prefab. Every instance of that prefab, " +
+                    "in every scene, now uses those copies. If that was not intended, revert those " +
+                    "overrides on the prefab asset.",
+                    MessageType.Warning);
+            }
+
             var state = CurrentState;
             if (state == null)
             {
+                if (DrawRecoverSection()) return;
                 var msg = _pendingMaterials.Count > 0
                     ? $"Not isolated yet. Press Isolate to copy {_pendingMaterials.Count} shared material(s)."
                     : "Not isolated yet. Press Isolate to copy this avatar's materials.";
@@ -429,6 +618,42 @@ namespace Xestrel.UI
             EditorGUILayout.HelpBox(
                 $"\"{state.avatarName}\": {matCount} mat / {texCount} tex / {animCount} anim / {clipCount} clip copy(ies){pendingNote}.{renamedNote}",
                 _pendingMaterials.Count > 0 ? MessageType.Warning : MessageType.None);
+        }
+
+        // Offer to rebuild the lost state component from a workspace manifest. Returns
+        // true when the recover UI was drawn (the caller skips the "not isolated" hint —
+        // the renderers demonstrably point at copies already).
+        private bool DrawRecoverSection()
+        {
+            if (_recoverCandidates.Count == 0) return false;
+
+            EditorGUILayout.HelpBox(
+                "This avatar's renderers point at Xestrel copies, but the Xestrel component is " +
+                "gone (prefab revert?). Recover rebuilds the bindings from the workspace manifest.",
+                MessageType.Warning);
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                var labels = new string[_recoverCandidates.Count];
+                for (int i = 0; i < labels.Length; i++)
+                {
+                    var m = _recoverCandidates[i];
+                    labels[i] = m != null
+                        ? (WorkspaceManifests.FolderNameOf(m) ?? m.avatarName ?? "(unnamed)")
+                        : "(missing)";
+                }
+                _recoverIndex = EditorGUILayout.Popup(_recoverIndex, labels);
+                if (GUILayout.Button(new GUIContent("Recover",
+                        "Re-add the Xestrel component with the bindings recorded in this workspace's manifest"),
+                    GUILayout.Width(80)))
+                {
+                    if (_recoverIndex >= 0 && _recoverIndex < _recoverCandidates.Count)
+                    {
+                        WorkspaceManifests.Recover(_avatar, _recoverCandidates[_recoverIndex]);
+                        _cachesDirty = true;
+                    }
+                }
+            }
+            return true;
         }
 
         // ---------- Materials tab ----------
@@ -920,6 +1145,240 @@ namespace Xestrel.UI
                     Selection.activeObject = b.copy;
                 }
             }
+        }
+
+        // ---------- Isolated tab ----------
+
+        private void DrawIsolatedTab()
+        {
+            var state = CurrentState;
+            if (state == null)
+            {
+                EditorGUILayout.HelpBox("Nothing is isolated on this avatar yet.", MessageType.Info);
+                return;
+            }
+
+            _scrolls[TabIsolated] = EditorGUILayout.BeginScrollView(_scrolls[TabIsolated]);
+
+            var matBindings = state.bindings ?? new List<XestrelMaterialBinding>();
+            DrawSectionLabel($"Materials ({matBindings.Count})");
+            if (matBindings.Count == 0)
+                EditorGUILayout.LabelField("(none)", EditorStyles.miniLabel);
+            // Snapshot so per-row Restore can't break enumeration.
+            foreach (var b in new List<XestrelMaterialBinding>(matBindings))
+            {
+                if (b == null || b.copy == null) continue;
+                DrawIsolatedMaterialRow(state, b);
+            }
+
+            EditorGUILayout.Space(6f);
+            int isolatedTexCount = _textures.Count - PendingTextureCount();
+            DrawSectionLabel($"Textures ({isolatedTexCount})");
+            if (isolatedTexCount == 0)
+                EditorGUILayout.LabelField("(none)", EditorStyles.miniLabel);
+            foreach (var entry in _textures)
+            {
+                if (entry.texture == null || !entry.isolated) continue;
+                DrawTextureListRow(state, entry);
+            }
+
+            EditorGUILayout.Space(6f);
+            var animBindings = state.animatorBindings ?? new List<XestrelAnimatorBinding>();
+            DrawSectionLabel($"Animators ({animBindings.Count})");
+            if (animBindings.Count == 0)
+                EditorGUILayout.LabelField("(none)", EditorStyles.miniLabel);
+            foreach (var b in animBindings)
+            {
+                if (b == null || b.copy == null) continue;
+                DrawAnimatorBindingRow(b);
+            }
+
+            EditorGUILayout.Space(6f);
+            var clipBindings = state.clipBindings ?? new List<XestrelClipBinding>();
+            DrawSectionLabel($"Clips ({clipBindings.Count})");
+            if (clipBindings.Count == 0)
+                EditorGUILayout.LabelField("(none)", EditorStyles.miniLabel);
+            foreach (var b in clipBindings)
+            {
+                if (b == null || b.copy == null) continue;
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    EditorGUILayout.LabelField(b.original != null ? b.original.name : "<missing>",
+                        GUILayout.MinWidth(80));
+                    using (new EditorGUI.DisabledScope(true))
+                    {
+                        EditorGUILayout.ObjectField(b.copy, typeof(AnimationClip), false);
+                    }
+                    if (GUILayout.Button("Select", EditorStyles.miniButton, GUILayout.Width(60)))
+                    {
+                        EditorGUIUtility.PingObject(b.copy);
+                        Selection.activeObject = b.copy;
+                    }
+                }
+            }
+
+            EditorGUILayout.Space(6f);
+            DrawSectionLabel($"Unused copies ({_unusedCopies.Count})");
+            if (_unusedCopies.Count == 0)
+            {
+                EditorGUILayout.LabelField("(none — every copy in the workspace folder is in use)",
+                    EditorStyles.miniLabel);
+            }
+            else
+            {
+                EditorGUILayout.HelpBox(
+                    "These assets live in this workspace's folder, but nothing on the avatar references " +
+                    "them and no binding tracks them (leftovers from Restore, or manual edits). " +
+                    "They are safe to delete by hand if you no longer want them.",
+                    MessageType.Info);
+                foreach (var asset in _unusedCopies)
+                {
+                    if (asset == null) continue;
+                    using (new EditorGUILayout.HorizontalScope())
+                    {
+                        using (new EditorGUI.DisabledScope(true))
+                        {
+                            EditorGUILayout.ObjectField(asset, typeof(Object), false);
+                        }
+                        if (GUILayout.Button("Select", EditorStyles.miniButton, GUILayout.Width(60)))
+                        {
+                            EditorGUIUtility.PingObject(asset);
+                            Selection.activeObject = asset;
+                        }
+                    }
+                }
+            }
+
+            EditorGUILayout.EndScrollView();
+        }
+
+        private void DrawIsolatedMaterialRow(XestrelMaterialIsolation state, XestrelMaterialBinding b)
+        {
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                using (new EditorGUI.DisabledScope(true))
+                {
+                    EditorGUILayout.ObjectField(b.original, typeof(Material), false);
+                    EditorGUILayout.ObjectField(b.copy, typeof(Material), false);
+                }
+                if (GUILayout.Button("Select", EditorStyles.miniButton, GUILayout.Width(60)))
+                {
+                    EditorGUIUtility.PingObject(b.copy);
+                    Selection.activeObject = b.copy;
+                }
+                if (GUILayout.Button("Restore", EditorStyles.miniButton, GUILayout.Width(60)))
+                {
+                    var name = b.original != null ? b.original.name : b.copy.name;
+                    if (EditorUtility.DisplayDialog(
+                            "Xestrel — Restore Material",
+                            $"Point renderers back at the original \"{name}\"?\n\nThe copy asset stays on disk.",
+                            "Restore", "Cancel"))
+                    {
+                        _expanded.Remove(b.copy);
+                        MaterialIsolator.RestoreBinding(state, b);
+                        _cachesDirty = true;
+                        GUIUtility.ExitGUI();
+                    }
+                }
+            }
+        }
+
+        // ---------- Additions tab ----------
+
+        private void DrawAdditionsTab()
+        {
+            _scrolls[TabAdditions] = EditorGUILayout.BeginScrollView(_scrolls[TabAdditions]);
+
+            if (_additionsReport.isPrefabInstance)
+            {
+                DrawSectionLabel("Base prefab");
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    using (new EditorGUI.DisabledScope(true))
+                    {
+                        EditorGUILayout.ObjectField(_additionsReport.basePrefab, typeof(GameObject), false);
+                    }
+                    if (GUILayout.Button("Select", EditorStyles.miniButton, GUILayout.Width(60)))
+                    {
+                        EditorGUIUtility.PingObject(_additionsReport.basePrefab);
+                        Selection.activeObject = _additionsReport.basePrefab;
+                    }
+                }
+            }
+            else
+            {
+                EditorGUILayout.HelpBox(
+                    "This avatar is not a prefab instance (unpacked?), so additions cannot be diffed " +
+                    "against a base prefab. Showing child prefab instances only.",
+                    MessageType.Info);
+            }
+
+            EditorGUILayout.Space(4f);
+            DrawSectionLabel($"Added objects ({_additionRows.Count})");
+            if (_additionRows.Count == 0)
+                EditorGUILayout.LabelField("(none)", EditorStyles.miniLabel);
+            foreach (var row in _additionRows)
+            {
+                if (row.go == null) continue;
+                using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
+                {
+                    using (new EditorGUILayout.HorizontalScope())
+                    {
+                        if (GUILayout.Button(row.go.name, EditorStyles.linkLabel))
+                        {
+                            EditorGUIUtility.PingObject(row.go);
+                            Selection.activeGameObject = row.go;
+                        }
+                        GUILayout.FlexibleSpace();
+                        if (row.pending.Count > 0 &&
+                            GUILayout.Button(new GUIContent($"Isolate ({row.pending.Count})",
+                                    "Isolate the shared materials used under this addition"),
+                                GUILayout.Width(90)))
+                        {
+                            foreach (var pair in row.pending)
+                                MaterialIsolator.IsolateSingle(_avatar, pair.Key);
+                            _cachesDirty = true;
+                        }
+                    }
+                    EditorGUILayout.LabelField(
+                        row.sourcePath != null
+                            ? row.sourcePath
+                            : "(scene object — lives in the scene file only)",
+                        EditorStyles.miniLabel);
+                }
+            }
+
+            if (_additionsReport.isPrefabInstance)
+            {
+                EditorGUILayout.Space(4f);
+                DrawSectionLabel($"Added components ({_additionsReport.addedComponents.Count})");
+                if (_additionsReport.addedComponents.Count == 0)
+                    EditorGUILayout.LabelField("(none)", EditorStyles.miniLabel);
+                foreach (var c in _additionsReport.addedComponents)
+                {
+                    if (c == null) continue;
+                    using (new EditorGUILayout.HorizontalScope())
+                    {
+                        EditorGUILayout.LabelField($"{c.gameObject.name} · {c.GetType().Name}");
+                        if (GUILayout.Button("Select", EditorStyles.miniButton, GUILayout.Width(60)))
+                        {
+                            EditorGUIUtility.PingObject(c.gameObject);
+                            Selection.activeGameObject = c.gameObject;
+                        }
+                    }
+                }
+
+                EditorGUILayout.Space(4f);
+                DrawSectionLabel($"Removed components ({_additionsReport.removedComponentDescriptions.Count})");
+                if (_additionsReport.removedComponentDescriptions.Count == 0)
+                    EditorGUILayout.LabelField("(none)", EditorStyles.miniLabel);
+                foreach (var desc in _additionsReport.removedComponentDescriptions)
+                {
+                    EditorGUILayout.LabelField(desc, EditorStyles.miniLabel);
+                }
+            }
+
+            EditorGUILayout.EndScrollView();
         }
 
         // ---------- Not Isolated tab ----------

@@ -379,6 +379,46 @@ namespace Xestrel.Tests
         }
 
         [Test]
+        public void DuplicateAndFork_CreatesIndependentVariantAndLeavesSourceAlone()
+        {
+            MaterialIsolator.Isolate(_avatar);
+            var state = _avatar.GetComponent<XestrelMaterialIsolation>();
+            TextureIsolator.IsolateProperty(state, state.bindings[0].copy, "_MainTex");
+            var sourceCopyMat = state.bindings[0].copy;
+            var sourceCopyTex = state.textureBindings[0].copy;
+
+            var dup = WorkspaceForker.DuplicateAndFork(state);
+            try
+            {
+                Assert.That(dup, Is.Not.Null);
+                Assert.That(dup, Is.Not.SameAs(_avatar));
+
+                var dupState = dup.GetComponent<XestrelMaterialIsolation>();
+                Assert.That(dupState, Is.Not.Null);
+                Assert.That(dupState.avatarName, Is.Not.EqualTo(state.avatarName));
+
+                var dupMat = dup.GetComponentInChildren<MeshRenderer>().sharedMaterials[0];
+                Assert.That(dupMat, Is.Not.SameAs(sourceCopyMat));
+                Assert.That(AssetDatabase.GetAssetPath(dupMat),
+                    Does.StartWith($"Assets/Xestrel/{dupState.avatarName}/"));
+                Assert.That(dupMat.mainTexture, Is.Not.SameAs(sourceCopyTex),
+                    "the duplicate inherits the isolated texture as its own fork");
+                Assert.That(dupState.bindings[0].original, Is.SameAs(_sourceMat),
+                    "fork bindings keep pointing at the true shared original");
+
+                // The source avatar and its workspace are untouched.
+                Assert.That(_avatar.GetComponentInChildren<MeshRenderer>().sharedMaterials[0],
+                    Is.SameAs(sourceCopyMat));
+                Assert.That(state.bindings[0].copy, Is.SameAs(sourceCopyMat));
+                Assert.That(state.textureBindings[0].copy, Is.SameAs(sourceCopyTex));
+            }
+            finally
+            {
+                if (dup != null) Object.DestroyImmediate(dup);
+            }
+        }
+
+        [Test]
         public void PruneDeadBindings_RemovesBindingsWithDeletedAssets()
         {
             MaterialIsolator.Isolate(_avatar);
@@ -491,6 +531,28 @@ namespace Xestrel.Tests
             Assert.That(second, Is.SameAs(first));
             Assert.That(state.animatorBindings.Count, Is.EqualTo(1));
             Assert.That(state.clipBindings.Count, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void IsolateController_DoesNotRecordAlreadyIsolatedClipsAsBindings()
+        {
+            // A clip already under Assets/Xestrel stays shared; it must not end up as a
+            // self-referential clip binding (original == copy).
+            XestrelPaths.EnsureDirectory("Assets/Xestrel/Shared");
+            var isolatedClip = new AnimationClip { name = "AlreadyIsolated" };
+            AssetDatabase.CreateAsset(isolatedClip, "Assets/Xestrel/Shared/AlreadyIsolated.anim");
+            var st = _sourceCtrl.layers[0].stateMachine.AddState("StateB");
+            st.motion = isolatedClip;
+            AssetDatabase.SaveAssets();
+            var state = _avatar.GetComponent<XestrelMaterialIsolation>();
+
+            var copy = AnimatorIsolator.IsolateController(state, _sourceCtrl);
+
+            Assert.That(copy.layers[0].stateMachine.states[1].state.motion, Is.SameAs(isolatedClip),
+                "the already-isolated clip stays referenced as-is");
+            Assert.That(state.clipBindings.Count, Is.EqualTo(1),
+                "only the truly copied clip is recorded");
+            Assert.That(state.clipBindings[0].original, Is.SameAs(_sourceClip));
         }
 
         [Test]
