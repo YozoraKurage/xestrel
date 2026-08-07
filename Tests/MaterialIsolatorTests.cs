@@ -379,6 +379,46 @@ namespace Xestrel.Tests
         }
 
         [Test]
+        public void DuplicateAndFork_CreatesIndependentVariantAndLeavesSourceAlone()
+        {
+            MaterialIsolator.Isolate(_avatar);
+            var state = _avatar.GetComponent<XestrelMaterialIsolation>();
+            TextureIsolator.IsolateProperty(state, state.bindings[0].copy, "_MainTex");
+            var sourceCopyMat = state.bindings[0].copy;
+            var sourceCopyTex = state.textureBindings[0].copy;
+
+            var dup = WorkspaceForker.DuplicateAndFork(state);
+            try
+            {
+                Assert.That(dup, Is.Not.Null);
+                Assert.That(dup, Is.Not.SameAs(_avatar));
+
+                var dupState = dup.GetComponent<XestrelMaterialIsolation>();
+                Assert.That(dupState, Is.Not.Null);
+                Assert.That(dupState.avatarName, Is.Not.EqualTo(state.avatarName));
+
+                var dupMat = dup.GetComponentInChildren<MeshRenderer>().sharedMaterials[0];
+                Assert.That(dupMat, Is.Not.SameAs(sourceCopyMat));
+                Assert.That(AssetDatabase.GetAssetPath(dupMat),
+                    Does.StartWith($"Assets/Xestrel/{dupState.avatarName}/"));
+                Assert.That(dupMat.mainTexture, Is.Not.SameAs(sourceCopyTex),
+                    "the duplicate inherits the isolated texture as its own fork");
+                Assert.That(dupState.bindings[0].original, Is.SameAs(_sourceMat),
+                    "fork bindings keep pointing at the true shared original");
+
+                // The source avatar and its workspace are untouched.
+                Assert.That(_avatar.GetComponentInChildren<MeshRenderer>().sharedMaterials[0],
+                    Is.SameAs(sourceCopyMat));
+                Assert.That(state.bindings[0].copy, Is.SameAs(sourceCopyMat));
+                Assert.That(state.textureBindings[0].copy, Is.SameAs(sourceCopyTex));
+            }
+            finally
+            {
+                if (dup != null) Object.DestroyImmediate(dup);
+            }
+        }
+
+        [Test]
         public void PruneDeadBindings_RemovesBindingsWithDeletedAssets()
         {
             MaterialIsolator.Isolate(_avatar);

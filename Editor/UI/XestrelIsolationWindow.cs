@@ -409,6 +409,22 @@ namespace Xestrel.UI
                             Isolator.Restore(CurrentState);
                             _cachesDirty = true;
                         }
+                        using (new EditorGUI.DisabledScope(!HasForkableBindings(CurrentState)))
+                        {
+                            if (GUILayout.Button(new GUIContent("Fork",
+                                    "Duplicate this avatar and give the duplicate its own independent copies (current edits are inherited)"),
+                                GUILayout.Height(24), GUILayout.Width(60)) && ConfirmDuplicateFork())
+                            {
+                                var dup = WorkspaceForker.DuplicateAndFork(CurrentState);
+                                if (dup != null)
+                                {
+                                    Selection.activeGameObject = dup;
+                                    if (!_lockAvatar) _avatar = dup;
+                                }
+                                _cachesDirty = true;
+                                GUIUtility.ExitGUI();
+                            }
+                        }
                         if (GUILayout.Button(new GUIContent("Folder",
                                 "Ping this avatar's copy folder in the Project window"),
                             GUILayout.Height(24), GUILayout.Width(60)))
@@ -421,6 +437,20 @@ namespace Xestrel.UI
                 EditorGUILayout.Space(2f);
                 DrawStatus();
             }
+        }
+
+        private static bool HasForkableBindings(XestrelMaterialIsolation state) =>
+            state != null &&
+            ((state.bindings?.Count ?? 0) > 0 || (state.animatorBindings?.Count ?? 0) > 0);
+
+        private bool ConfirmDuplicateFork()
+        {
+            return EditorUtility.DisplayDialog(
+                "Xestrel — Fork",
+                $"Duplicate \"{_avatar.name}\" and give the duplicate its own independent copies " +
+                "under a new folder in Assets/Xestrel/?\n\n" +
+                "All edits made so far are inherited. The original avatar and its workspace are not modified.",
+                "Fork", "Cancel");
         }
 
         private bool ConfirmRestoreAll()

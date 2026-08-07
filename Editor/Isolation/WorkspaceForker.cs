@@ -18,6 +18,66 @@ namespace Xestrel.Isolation
     /// </summary>
     internal static class WorkspaceForker
     {
+        /// <summary>
+        /// One-click variant: duplicate the avatar in the scene (keeping its prefab
+        /// connection when possible) and fork the duplicate, so the new avatar gets
+        /// independent copies inheriting all edits made so far. The source avatar and
+        /// its workspace are never touched. Returns the duplicate, or null when the
+        /// duplication itself failed.
+        /// </summary>
+        public static GameObject DuplicateAndFork(XestrelMaterialIsolation state)
+        {
+            if (state == null) return null;
+            var src = state.gameObject;
+
+            Undo.IncrementCurrentGroup();
+            var undoGroup = Undo.GetCurrentGroup();
+
+            var dup = DuplicateInScene(src);
+            if (dup == null) return null;
+
+            var dupState = dup.GetComponent<XestrelMaterialIsolation>();
+            if (dupState == null)
+            {
+                // Should not happen — the duplicate carries the component with it.
+                XestrelLog.Error(XestrelLogCategory.Isolate,
+                    $"Duplicate of '{src.name}' has no isolation component; not forking");
+                return dup;
+            }
+            if (!Fork(dupState))
+            {
+                XestrelLog.Warn(XestrelLogCategory.Isolate,
+                    $"Duplicated '{src.name}' but Fork failed; the duplicate still shares the source's copies");
+            }
+            Undo.SetCurrentGroupName("Xestrel Duplicate & Fork");
+            Undo.CollapseUndoOperations(undoGroup);
+            return dup;
+        }
+
+        // Duplicate like Ctrl+D so a prefab instance stays connected to its prefab; fall
+        // back to a plain Instantiate (which flattens the prefab link) when the
+        // pasteboard path is unavailable (e.g. batch mode).
+        private static GameObject DuplicateInScene(GameObject src)
+        {
+            try
+            {
+                Selection.activeGameObject = src;
+                Unsupported.DuplicateGameObjectsUsingPasteboard();
+                var dup = Selection.activeGameObject;
+                if (dup != null && dup != src) return dup;
+            }
+            catch (System.Exception ex)
+            {
+                XestrelLog.Warn(XestrelLogCategory.Isolate,
+                    $"Pasteboard duplicate unavailable ({ex.Message}); falling back to Instantiate");
+            }
+
+            var fallback = Object.Instantiate(src, src.transform.parent);
+            fallback.name = GameObjectUtility.GetUniqueNameForSibling(src.transform.parent, src.name);
+            Undo.RegisterCreatedObjectUndo(fallback, "Xestrel Duplicate & Fork");
+            return fallback;
+        }
+
         public static bool Fork(XestrelMaterialIsolation state)
         {
             if (state == null) return false;
