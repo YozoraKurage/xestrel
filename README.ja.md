@@ -23,7 +23,7 @@ Unity 2022.3 LTS、VRChat Avatars SDK 3.5+。NDMF / Modular Avatar / Avatar Opti
 1. アバタープレハブをシーンに配置します。
 2. Hierarchy でアバタールートを右クリック → **Xestrel → Isolate Materials**、または **Window → Xestrel → Asset Isolation** を開いて **Isolate** を押します。ウィンドウは Hierarchy の選択に追従してアバターを切り替えます。固定したい場合は Avatar フィールド横のロックトグルを使ってください。
 3. マテリアルコピーが `Assets/Xestrel/<アバター名>/Materials/` に作られ、レンダラーが差し替わります。**Folder** ボタンで Project ウィンドウ内のそのフォルダーを表示できます。
-4. ウィンドウはタブ構成です: **Materials**(マテリアル単位のバインディング)、**Textures**(コピー側マテリアルが参照する全テクスチャの一覧)、**Animators**、**Not Isolated**(まだ共有のままのアセット一覧。タブラベルに未分離数が表示されます)。
+4. ウィンドウはタブ構成です: **Materials**(マテリアル単位のバインディング)、**Textures**(コピー側マテリアルが参照する全テクスチャの一覧)、**Animators**、**Isolated**(xestrel がこのアバターに行った変更の一覧 — マテリアル / テクスチャ / アニメーター / クリップに加え、どこからも参照されなくなった*未使用コピー*も表示)、**Additions**(ベース Prefab に対して何が追加されたか: 追加された Prefab インスタンスやシーンオブジェクトの一覧と追加単位の Isolate、追加 / 削除されたコンポーネント。Unpack 済みアバターでは子 Prefab インスタンスの一覧に切り替わります)、**Not Isolated**(まだ共有のままのアセット一覧。タブラベルに未分離数が表示されます)。
 5. *Materials* タブでバインディングを展開します。アバター専用にしたいテクスチャスロットの **Isolate** ボタンを押すと、そのテクスチャが `Assets/Xestrel/<アバター名>/Textures/` にコピーされて差し替わります。**Isolate All Textures** で全スロット一括も可能。分離済みスロットは ● マーク付きで、**Restore** で個別に戻せます。
 6. *Textures* タブでは各テクスチャのサムネイル・分離状態・使用箇所(どのマテリアルのどのスロットか)が一覧できます。ここでの **Isolate** / **Restore** は、そのテクスチャを使う全スロットを一括で差し替え/復元します。
 7. *Not Isolated* タブには、共有のままのマテリアル(使用スロット数付き・ワンクリックで個別分離)、テクスチャ、Descriptor の Playable Layer がまとめて表示されます。

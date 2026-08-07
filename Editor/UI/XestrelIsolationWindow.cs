@@ -17,12 +17,14 @@ namespace Xestrel.UI
         private const int TabMaterials = 0;
         private const int TabTextures = 1;
         private const int TabAnimators = 2;
-        private const int TabPending = 3;
+        private const int TabIsolated = 3;
+        private const int TabAdditions = 4;
+        private const int TabPending = 5;
 
         private GameObject _avatar;
         private bool _lockAvatar;
         private int _tab;
-        private readonly Vector2[] _scrolls = new Vector2[4];
+        private readonly Vector2[] _scrolls = new Vector2[6];
         private string _search = string.Empty;
         private readonly HashSet<Material> _expanded = new HashSet<Material>();
         private RuntimeAnimatorController _pendingAnimator;
@@ -55,6 +57,17 @@ namespace Xestrel.UI
         // The avatar's prefab *asset* references Xestrel copies — overrides were applied
         // to the prefab, so every instance in every scene uses those copies.
         private bool _prefabAssetHasCopies;
+        // Copies in the workspace folder that nothing references or tracks any more.
+        private List<Object> _unusedCopies = new List<Object>();
+        // What was added to the avatar relative to its base prefab (derived, never stored).
+        private AvatarAdditionsReport _additionsReport = new AvatarAdditionsReport();
+        private sealed class AdditionRow
+        {
+            public GameObject go;
+            public string sourcePath; // prefab asset path, or null for scene-only objects
+            public List<KeyValuePair<Material, int>> pending;
+        }
+        private readonly List<AdditionRow> _additionRows = new List<AdditionRow>();
 
         [MenuItem("Window/Xestrel/Asset Isolation")]
         public static void Open()
@@ -141,6 +154,30 @@ namespace Xestrel.UI
             DetectSharedCopies();
             RebuildRecoverCandidates();
             DetectPrefabAssetCopies();
+            _unusedCopies = WorkspaceAudit.CollectUnusedCopies(CurrentState);
+            RebuildAdditions();
+        }
+
+        private void RebuildAdditions()
+        {
+            _additionRows.Clear();
+            _additionsReport = AvatarAdditions.Scan(_avatar);
+            foreach (var go in _additionsReport.addedObjects)
+            {
+                if (go == null) continue;
+                string sourcePath = null;
+                if (PrefabUtility.IsAnyPrefabInstanceRoot(go))
+                {
+                    var src = PrefabUtility.GetCorrespondingObjectFromSource(go);
+                    if (src != null) sourcePath = AssetDatabase.GetAssetPath(src);
+                }
+                _additionRows.Add(new AdditionRow
+                {
+                    go = go,
+                    sourcePath = sourcePath,
+                    pending = MaterialIsolator.CollectPendingMaterials(go),
+                });
+            }
         }
 
         private void RebuildRecoverCandidates()
@@ -343,6 +380,8 @@ namespace Xestrel.UI
                 new GUIContent("Materials"),
                 new GUIContent("Textures"),
                 new GUIContent("Animators"),
+                new GUIContent("Isolated"),
+                new GUIContent("Additions"),
                 new GUIContent(pendingTotal > 0 ? $"Not Isolated ({pendingTotal})" : "Not Isolated"),
             };
             _tab = GUILayout.Toolbar(_tab, tabs, GUILayout.Height(22f));
@@ -353,6 +392,8 @@ namespace Xestrel.UI
                 case TabMaterials: DrawMaterialsTab(); break;
                 case TabTextures: DrawTexturesTab(); break;
                 case TabAnimators: DrawAnimatorsTab(); break;
+                case TabIsolated: DrawIsolatedTab(); break;
+                case TabAdditions: DrawAdditionsTab(); break;
                 case TabPending: DrawPendingTab(); break;
             }
         }
@@ -1095,6 +1136,240 @@ namespace Xestrel.UI
                     Selection.activeObject = b.copy;
                 }
             }
+        }
+
+        // ---------- Isolated tab ----------
+
+        private void DrawIsolatedTab()
+        {
+            var state = CurrentState;
+            if (state == null)
+            {
+                EditorGUILayout.HelpBox("Nothing is isolated on this avatar yet.", MessageType.Info);
+                return;
+            }
+
+            _scrolls[TabIsolated] = EditorGUILayout.BeginScrollView(_scrolls[TabIsolated]);
+
+            var matBindings = state.bindings ?? new List<XestrelMaterialBinding>();
+            DrawSectionLabel($"Materials ({matBindings.Count})");
+            if (matBindings.Count == 0)
+                EditorGUILayout.LabelField("(none)", EditorStyles.miniLabel);
+            // Snapshot so per-row Restore can't break enumeration.
+            foreach (var b in new List<XestrelMaterialBinding>(matBindings))
+            {
+                if (b == null || b.copy == null) continue;
+                DrawIsolatedMaterialRow(state, b);
+            }
+
+            EditorGUILayout.Space(6f);
+            int isolatedTexCount = _textures.Count - PendingTextureCount();
+            DrawSectionLabel($"Textures ({isolatedTexCount})");
+            if (isolatedTexCount == 0)
+                EditorGUILayout.LabelField("(none)", EditorStyles.miniLabel);
+            foreach (var entry in _textures)
+            {
+                if (entry.texture == null || !entry.isolated) continue;
+                DrawTextureListRow(state, entry);
+            }
+
+            EditorGUILayout.Space(6f);
+            var animBindings = state.animatorBindings ?? new List<XestrelAnimatorBinding>();
+            DrawSectionLabel($"Animators ({animBindings.Count})");
+            if (animBindings.Count == 0)
+                EditorGUILayout.LabelField("(none)", EditorStyles.miniLabel);
+            foreach (var b in animBindings)
+            {
+                if (b == null || b.copy == null) continue;
+                DrawAnimatorBindingRow(b);
+            }
+
+            EditorGUILayout.Space(6f);
+            var clipBindings = state.clipBindings ?? new List<XestrelClipBinding>();
+            DrawSectionLabel($"Clips ({clipBindings.Count})");
+            if (clipBindings.Count == 0)
+                EditorGUILayout.LabelField("(none)", EditorStyles.miniLabel);
+            foreach (var b in clipBindings)
+            {
+                if (b == null || b.copy == null) continue;
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    EditorGUILayout.LabelField(b.original != null ? b.original.name : "<missing>",
+                        GUILayout.MinWidth(80));
+                    using (new EditorGUI.DisabledScope(true))
+                    {
+                        EditorGUILayout.ObjectField(b.copy, typeof(AnimationClip), false);
+                    }
+                    if (GUILayout.Button("Select", EditorStyles.miniButton, GUILayout.Width(60)))
+                    {
+                        EditorGUIUtility.PingObject(b.copy);
+                        Selection.activeObject = b.copy;
+                    }
+                }
+            }
+
+            EditorGUILayout.Space(6f);
+            DrawSectionLabel($"Unused copies ({_unusedCopies.Count})");
+            if (_unusedCopies.Count == 0)
+            {
+                EditorGUILayout.LabelField("(none — every copy in the workspace folder is in use)",
+                    EditorStyles.miniLabel);
+            }
+            else
+            {
+                EditorGUILayout.HelpBox(
+                    "These assets live in this workspace's folder, but nothing on the avatar references " +
+                    "them and no binding tracks them (leftovers from Restore, or manual edits). " +
+                    "They are safe to delete by hand if you no longer want them.",
+                    MessageType.Info);
+                foreach (var asset in _unusedCopies)
+                {
+                    if (asset == null) continue;
+                    using (new EditorGUILayout.HorizontalScope())
+                    {
+                        using (new EditorGUI.DisabledScope(true))
+                        {
+                            EditorGUILayout.ObjectField(asset, typeof(Object), false);
+                        }
+                        if (GUILayout.Button("Select", EditorStyles.miniButton, GUILayout.Width(60)))
+                        {
+                            EditorGUIUtility.PingObject(asset);
+                            Selection.activeObject = asset;
+                        }
+                    }
+                }
+            }
+
+            EditorGUILayout.EndScrollView();
+        }
+
+        private void DrawIsolatedMaterialRow(XestrelMaterialIsolation state, XestrelMaterialBinding b)
+        {
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                using (new EditorGUI.DisabledScope(true))
+                {
+                    EditorGUILayout.ObjectField(b.original, typeof(Material), false);
+                    EditorGUILayout.ObjectField(b.copy, typeof(Material), false);
+                }
+                if (GUILayout.Button("Select", EditorStyles.miniButton, GUILayout.Width(60)))
+                {
+                    EditorGUIUtility.PingObject(b.copy);
+                    Selection.activeObject = b.copy;
+                }
+                if (GUILayout.Button("Restore", EditorStyles.miniButton, GUILayout.Width(60)))
+                {
+                    var name = b.original != null ? b.original.name : b.copy.name;
+                    if (EditorUtility.DisplayDialog(
+                            "Xestrel — Restore Material",
+                            $"Point renderers back at the original \"{name}\"?\n\nThe copy asset stays on disk.",
+                            "Restore", "Cancel"))
+                    {
+                        _expanded.Remove(b.copy);
+                        MaterialIsolator.RestoreBinding(state, b);
+                        _cachesDirty = true;
+                        GUIUtility.ExitGUI();
+                    }
+                }
+            }
+        }
+
+        // ---------- Additions tab ----------
+
+        private void DrawAdditionsTab()
+        {
+            _scrolls[TabAdditions] = EditorGUILayout.BeginScrollView(_scrolls[TabAdditions]);
+
+            if (_additionsReport.isPrefabInstance)
+            {
+                DrawSectionLabel("Base prefab");
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    using (new EditorGUI.DisabledScope(true))
+                    {
+                        EditorGUILayout.ObjectField(_additionsReport.basePrefab, typeof(GameObject), false);
+                    }
+                    if (GUILayout.Button("Select", EditorStyles.miniButton, GUILayout.Width(60)))
+                    {
+                        EditorGUIUtility.PingObject(_additionsReport.basePrefab);
+                        Selection.activeObject = _additionsReport.basePrefab;
+                    }
+                }
+            }
+            else
+            {
+                EditorGUILayout.HelpBox(
+                    "This avatar is not a prefab instance (unpacked?), so additions cannot be diffed " +
+                    "against a base prefab. Showing child prefab instances only.",
+                    MessageType.Info);
+            }
+
+            EditorGUILayout.Space(4f);
+            DrawSectionLabel($"Added objects ({_additionRows.Count})");
+            if (_additionRows.Count == 0)
+                EditorGUILayout.LabelField("(none)", EditorStyles.miniLabel);
+            foreach (var row in _additionRows)
+            {
+                if (row.go == null) continue;
+                using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
+                {
+                    using (new EditorGUILayout.HorizontalScope())
+                    {
+                        if (GUILayout.Button(row.go.name, EditorStyles.linkLabel))
+                        {
+                            EditorGUIUtility.PingObject(row.go);
+                            Selection.activeGameObject = row.go;
+                        }
+                        GUILayout.FlexibleSpace();
+                        if (row.pending.Count > 0 &&
+                            GUILayout.Button(new GUIContent($"Isolate ({row.pending.Count})",
+                                    "Isolate the shared materials used under this addition"),
+                                GUILayout.Width(90)))
+                        {
+                            foreach (var pair in row.pending)
+                                MaterialIsolator.IsolateSingle(_avatar, pair.Key);
+                            _cachesDirty = true;
+                        }
+                    }
+                    EditorGUILayout.LabelField(
+                        row.sourcePath != null
+                            ? row.sourcePath
+                            : "(scene object — lives in the scene file only)",
+                        EditorStyles.miniLabel);
+                }
+            }
+
+            if (_additionsReport.isPrefabInstance)
+            {
+                EditorGUILayout.Space(4f);
+                DrawSectionLabel($"Added components ({_additionsReport.addedComponents.Count})");
+                if (_additionsReport.addedComponents.Count == 0)
+                    EditorGUILayout.LabelField("(none)", EditorStyles.miniLabel);
+                foreach (var c in _additionsReport.addedComponents)
+                {
+                    if (c == null) continue;
+                    using (new EditorGUILayout.HorizontalScope())
+                    {
+                        EditorGUILayout.LabelField($"{c.gameObject.name} · {c.GetType().Name}");
+                        if (GUILayout.Button("Select", EditorStyles.miniButton, GUILayout.Width(60)))
+                        {
+                            EditorGUIUtility.PingObject(c.gameObject);
+                            Selection.activeGameObject = c.gameObject;
+                        }
+                    }
+                }
+
+                EditorGUILayout.Space(4f);
+                DrawSectionLabel($"Removed components ({_additionsReport.removedComponentDescriptions.Count})");
+                if (_additionsReport.removedComponentDescriptions.Count == 0)
+                    EditorGUILayout.LabelField("(none)", EditorStyles.miniLabel);
+                foreach (var desc in _additionsReport.removedComponentDescriptions)
+                {
+                    EditorGUILayout.LabelField(desc, EditorStyles.miniLabel);
+                }
+            }
+
+            EditorGUILayout.EndScrollView();
         }
 
         // ---------- Not Isolated tab ----------
