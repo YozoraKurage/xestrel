@@ -404,8 +404,17 @@ namespace Xestrel.UI
         {
             var rect = EditorGUILayout.GetControlRect(false, 28f);
             EditorGUI.DrawRect(rect, new Color(0f, 0f, 0f, 0.18f));
-            var labelRect = new Rect(rect.x + 10f, rect.y + 6f, rect.width - 20f, rect.height - 8f);
+            var labelRect = new Rect(rect.x + 10f, rect.y + 6f, rect.width - 90f, rect.height - 8f);
             GUI.Label(labelRect, "Asset Isolation", EditorStyles.boldLabel);
+            var btnRect = new Rect(rect.xMax - 70f, rect.y + 4f, 60f, rect.height - 8f);
+            using (new EditorGUI.DisabledScope(_avatar == null))
+            {
+                if (GUI.Button(btnRect, new GUIContent("Graph",
+                        "Open the isolation graph for this avatar"), EditorStyles.miniButton))
+                {
+                    XestrelGraphWindow.OpenFor(_avatar);
+                }
+            }
         }
 
         private void DrawAvatarSection()

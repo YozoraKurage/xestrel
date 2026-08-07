@@ -31,6 +31,10 @@ Copy or symlink this directory into your Unity project at `Packages/net.yozolab.
 9. Press **Restore** on the inspector or window (with confirmation) to revert texture properties to their originals (textures first) and then point every renderer back at the shared materials. A single material can be reverted with its **Restore Material** button; the copy asset always stays on disk.
 10. If you delete copy assets from the Project window, the window/inspector show a **Prune** button that drops the now-dead bindings.
 
+## Graph
+
+**Window → Xestrel → Isolation Graph** (or the **Graph** button in the isolation window) opens a read-only GraphView of the avatar's isolation state: avatar → materials → textures and avatar → descriptor controllers → clips. Nodes are colored orange (still shared), green (isolated copy), or red (an isolated copy that another workspace's manifest also tracks — a duplicated avatar that needs Fork, detected even when its scene is not loaded). Double-click a node to ping the asset.
+
 ## Workspaces and renaming
 
 - The folder name under `Assets/Xestrel/` is fixed the first time an avatar is isolated. Renaming the GameObject afterwards is safe: existing and new copies keep going to the original folder, and the status line tells you which one.
