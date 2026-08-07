@@ -409,10 +409,10 @@ namespace Xestrel.UI
             var btnRect = new Rect(rect.xMax - 70f, rect.y + 4f, 60f, rect.height - 8f);
             using (new EditorGUI.DisabledScope(_avatar == null))
             {
-                if (GUI.Button(btnRect, new GUIContent("Graph",
-                        "Open the isolation graph for this avatar"), EditorStyles.miniButton))
+                if (GUI.Button(btnRect, new GUIContent("Deps",
+                        "Open the dependency browser for this avatar"), EditorStyles.miniButton))
                 {
-                    XestrelGraphWindow.OpenFor(_avatar);
+                    XestrelDependencyWindow.OpenFor(_avatar);
                 }
             }
         }
