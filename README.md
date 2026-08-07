@@ -33,7 +33,7 @@ Copy or symlink this directory into your Unity project at `Packages/net.yozolab.
 
 ## Graph
 
-**Window → Xestrel → Isolation Graph** (or the **Graph** button in the isolation window) opens a read-only GraphView of the avatar's isolation state: avatar → materials → textures and avatar → descriptor controllers → clips. Nodes are colored orange (still shared), green (isolated copy), or red (an isolated copy that another workspace's manifest also tracks — a duplicated avatar that needs Fork, detected even when its scene is not loaded). Double-click a node to ping the asset.
+**Window → Xestrel → Dependency Graph** (or the **Graph** button in the isolation window) opens a dependency graph of the avatar. The first ring is discovered generically — every serialized object-reference of every component in the hierarchy — so Modular Avatar / VRCFury / audio / mesh / menu references all appear without per-type support. Each node has a **+n** button that expands its own direct dependencies (via the import pipeline, so it is cheap), which keeps the initial view small; kind toggles (Mat / Tex / Mesh / Anim / Clip / Menu / Shader / Prefab / Other), a **Hide Packages** toggle, and a search highlight tame the rest. Isolation state is an overlay: orange = still shared and isolatable, green = isolated copy, red = a copy that another workspace's manifest also tracks (a duplicated avatar needing Fork, detected even in unloaded scenes), gray = kinds xestrel does not manage. Right-click a node to **Isolate** / **Restore** it for the primary avatar, double-click to ping. **Add Selected** adds more avatars as roots to see sharing between avatars.
 
 ## Workspaces and renaming
 
