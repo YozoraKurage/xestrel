@@ -31,6 +31,9 @@ namespace Xestrel.Isolation
                 state.avatarName = oldName;
                 return false;
             }
+            // Still pointing at the source workspace's manifest; drop it so Sync creates
+            // a fresh manifest inside the forked folder.
+            state.workspaceManifest = null;
 
             var matMap = ForkMaterials(state);
             var texMap = ForkTextures(state);
@@ -39,6 +42,7 @@ namespace Xestrel.Isolation
             RewireRenderers(state, matMap);
 
             EditorUtility.SetDirty(state);
+            WorkspaceManifests.Sync(state);
             AssetDatabase.SaveAssets();
             XestrelLog.Info(XestrelLogCategory.Isolate,
                 $"Forked workspace '{oldName}' → '{state.avatarName}': " +

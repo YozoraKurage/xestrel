@@ -86,6 +86,7 @@ namespace Xestrel.Isolation
                 state.bindings.Add(new XestrelMaterialBinding { original = kv.Key, copy = kv.Value });
             }
             EditorUtility.SetDirty(state);
+            WorkspaceManifests.Sync(state);
             AssetDatabase.SaveAssets();
 
             XestrelLog.Info(XestrelLogCategory.Isolate,
@@ -102,7 +103,12 @@ namespace Xestrel.Isolation
         internal static void EnsureWorkspaceName(XestrelMaterialIsolation state, GameObject avatarRoot)
         {
             if (state == null || avatarRoot == null) return;
-            if (!string.IsNullOrEmpty(state.avatarName)) return;
+            if (!string.IsNullOrEmpty(state.avatarName))
+            {
+                // Follow a workspace folder rename before the name is used to build paths.
+                WorkspaceManifests.HealWorkspaceName(state);
+                return;
+            }
 
             var baseName = XestrelPaths.SanitiseFileSegment(avatarRoot.name);
             var candidate = baseName;
@@ -229,6 +235,7 @@ namespace Xestrel.Isolation
                     rewriteCount++;
                 }
             }
+            WorkspaceManifests.Sync(state);
             AssetDatabase.SaveAssets();
 
             XestrelLog.Info(XestrelLogCategory.Isolate,
@@ -271,6 +278,8 @@ namespace Xestrel.Isolation
             Undo.RecordObject(state, "Xestrel Restore Material");
             state.bindings?.Remove(binding);
             EditorUtility.SetDirty(state);
+            WorkspaceManifests.Sync(state);
+            AssetDatabase.SaveAssets();
             XestrelLog.Info(XestrelLogCategory.Isolate,
                 $"Restored material '{binding.original.name}' on '{state.avatarName}': {rewriteCount} renderer(s) reverted (copy asset left on disk)");
         }

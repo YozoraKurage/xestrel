@@ -38,6 +38,10 @@ namespace Xestrel.Runtime
     public sealed class XestrelMaterialIsolation : MonoBehaviour, IEditorOnly
     {
         public string avatarName;
+        // The workspace manifest asset (Assets/Xestrel/<AvatarName>/XestrelWorkspace.asset)
+        // mirroring these bindings so they survive losing this component. Typed as the
+        // base class because the concrete type lives in the editor assembly.
+        public ScriptableObject workspaceManifest;
         public List<XestrelMaterialBinding> bindings = new List<XestrelMaterialBinding>();
         public List<XestrelTextureBinding> textureBindings = new List<XestrelTextureBinding>();
         public List<XestrelAnimatorBinding> animatorBindings = new List<XestrelAnimatorBinding>();

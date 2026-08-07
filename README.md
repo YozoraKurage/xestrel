@@ -37,6 +37,14 @@ Copy or symlink this directory into your Unity project at `Packages/net.yozolab.
 - If the folder name is already taken (a same-named avatar in another scene, or leftovers from a component you removed), a ` (n)` suffix is chosen — so placing the same prefab into several scenes, or twice into one scene, gives each instance its own independent workspace.
 - **Deriving a variant that inherits your edits**: duplicate the isolated avatar in the Hierarchy (Ctrl+D). The duplicate initially shares the same copy assets, so the window shows a warning with a **Fork** button — press it on the duplicate. Fork re-copies every bound material / texture / animator / clip into a fresh workspace folder (all edits made so far carry over), rewires the duplicate to the forks, and keeps each binding pointing at the true shared original, so Restore still works per avatar. The source avatar is never touched. For a from-scratch variant, place a fresh prefab instance instead and isolate it.
 
+## Recovery and safety
+
+- Every workspace also stores a manifest asset, `Assets/Xestrel/<AvatarName>/XestrelWorkspace.asset`, mirroring the component's bindings after every change. The component on the avatar stays authoritative; the manifest exists so the original → copy mapping survives losing the component.
+- If the component is lost (a prefab **Revert All**, a scene mishap) while the renderers still point at copies, the window detects it and shows a **Recover** button that rebuilds the component from the manifest.
+- The manifest additionally keeps a permanent GUID history of every copy → original pair ever recorded, so even bindings pruned while an asset was missing stay reconstructible.
+- Renaming a workspace folder under `Assets/Xestrel/` is followed automatically: the workspace adopts the folder's new name and new copies keep landing next to the old ones.
+- The window warns when the avatar's prefab *asset* itself references Xestrel copies (renderer / descriptor overrides were applied to the prefab) — that makes every instance of the prefab, in every scene, use those copies.
+
 ## Copies
 
 - Material copies are plain `.mat` assets created via `AssetDatabase.CopyAsset` (not Material Variants). They are fully independent of the source.
@@ -51,4 +59,4 @@ Copy or symlink this directory into your Unity project at `Packages/net.yozolab.
 - `Editor/Isolation/` — Material / Texture / Animator copy factories and isolator services
 - `Editor/UI/` — EditorWindow + Hierarchy context menu
 - `Editor/Inspector/` — Custom inspector for the MonoBehavior
-- `Editor.Tests/` — Editor Test Runner suite
+- `Tests/` — Editor Test Runner suite

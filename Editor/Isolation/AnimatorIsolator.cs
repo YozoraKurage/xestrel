@@ -22,6 +22,7 @@ namespace Xestrel.Isolation
             XestrelMaterialIsolation state, RuntimeAnimatorController original)
         {
             if (state == null || original == null) return null;
+            WorkspaceManifests.HealWorkspaceName(state);
 
             // Reuse if already isolated.
             if (state.animatorBindings != null)
@@ -84,15 +85,23 @@ namespace Xestrel.Isolation
 
             EditorUtility.SetDirty(copy);
 
+            Undo.RecordObject(state, "Xestrel Isolate Animator");
             if (state.animatorBindings == null)
                 state.animatorBindings = new List<XestrelAnimatorBinding>();
             state.animatorBindings.Add(new XestrelAnimatorBinding { original = original, copy = copy });
 
             state.clipBindings = new List<XestrelClipBinding>(clipMap.Count);
             foreach (var kv in clipMap)
+            {
+                // Identity entries mark clips that stay shared (FBX sub-assets, clips
+                // already under Assets/Xestrel); they are a rewrite-time cache only and
+                // must not be recorded as bindings.
+                if (ReferenceEquals(kv.Key, kv.Value)) continue;
                 state.clipBindings.Add(new XestrelClipBinding { original = kv.Key, copy = kv.Value });
+            }
 
             EditorUtility.SetDirty(state);
+            WorkspaceManifests.Sync(state);
             AssetDatabase.SaveAssets();
 
             TryAutoWire(state, original, copy);

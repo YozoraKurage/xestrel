@@ -494,6 +494,28 @@ namespace Xestrel.Tests
         }
 
         [Test]
+        public void IsolateController_DoesNotRecordAlreadyIsolatedClipsAsBindings()
+        {
+            // A clip already under Assets/Xestrel stays shared; it must not end up as a
+            // self-referential clip binding (original == copy).
+            XestrelPaths.EnsureDirectory("Assets/Xestrel/Shared");
+            var isolatedClip = new AnimationClip { name = "AlreadyIsolated" };
+            AssetDatabase.CreateAsset(isolatedClip, "Assets/Xestrel/Shared/AlreadyIsolated.anim");
+            var st = _sourceCtrl.layers[0].stateMachine.AddState("StateB");
+            st.motion = isolatedClip;
+            AssetDatabase.SaveAssets();
+            var state = _avatar.GetComponent<XestrelMaterialIsolation>();
+
+            var copy = AnimatorIsolator.IsolateController(state, _sourceCtrl);
+
+            Assert.That(copy.layers[0].stateMachine.states[1].state.motion, Is.SameAs(isolatedClip),
+                "the already-isolated clip stays referenced as-is");
+            Assert.That(state.clipBindings.Count, Is.EqualTo(1),
+                "only the truly copied clip is recorded");
+            Assert.That(state.clipBindings[0].original, Is.SameAs(_sourceClip));
+        }
+
+        [Test]
         public void Restore_ClearsAnimatorAndClipBindings()
         {
             var state = _avatar.GetComponent<XestrelMaterialIsolation>();
