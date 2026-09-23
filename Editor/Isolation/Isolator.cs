@@ -10,8 +10,9 @@ namespace Xestrel.Isolation
     /// Top-level entry point used by the context menu / window's "Isolate" button.
     /// Only materials are isolated in bulk; texture isolation is on-demand from the
     /// per-property "Isolate" button in the window (see <see cref="TextureIsolator.IsolateProperty"/>).
-    /// Restore reverts both, in dependency order: textures first (writes into copy
-    /// materials), then materials (renderers point back at originals).
+    /// Restore points the avatar's renderers / descriptor back at the originals and
+    /// clears every binding. It never writes into copy assets, which other avatars
+    /// sharing the workspace (unforked duplicates in other scenes) may still use.
     /// </summary>
     internal static class Isolator
     {

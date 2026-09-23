@@ -439,20 +439,20 @@ namespace Xestrel.Tests
         }
 
         [Test]
-        public void Isolator_RestoreRevertsBoth()
+        public void Isolator_RestoreRevertsRenderersWithoutTouchingCopyMaterials()
         {
             MaterialIsolator.Isolate(_avatar);
             var state = _avatar.GetComponent<XestrelMaterialIsolation>();
             var copyMat = state.bindings[0].copy;
-            TextureIsolator.IsolateProperty(state, copyMat, "_MainTex");
+            var copyTex = TextureIsolator.IsolateProperty(state, copyMat, "_MainTex");
 
             Isolator.Restore(state);
 
             Assert.That(_avatar.GetComponentInChildren<MeshRenderer>().sharedMaterials[0], Is.SameAs(_sourceMat));
             Assert.That(state.bindings, Is.Empty);
             Assert.That(state.textureBindings, Is.Empty);
-            Assert.That(copyMat.mainTexture, Is.SameAs(_sourceTex),
-                "copy material's texture reference should be restored before the renderer is reverted");
+            Assert.That(copyMat.mainTexture, Is.SameAs(copyTex),
+                "full Restore must not write into the copy material — another avatar may still use it");
         }
     }
 

@@ -208,63 +208,24 @@ namespace Xestrel.Isolation
         }
 
         /// <summary>
-        /// Revert every copy material's texture references back to their originals
-        /// and clear the recorded texture bindings. Copy texture assets on disk are
-        /// not deleted.
+        /// Clear the recorded texture bindings as part of a full Restore. The copy
+        /// materials are deliberately left untouched: the renderers are pointed back at
+        /// the original materials anyway, and a copy <c>.mat</c> is a project asset that
+        /// may still be used by another avatar sharing this workspace — e.g. an unforked
+        /// duplicate in another (possibly unloaded) scene. Rewriting its texture slots
+        /// here would silently revert that avatar's textures too. Copy texture assets on
+        /// disk are not deleted.
         /// </summary>
         public static void Restore(XestrelMaterialIsolation state)
         {
             if (state == null) return;
-            var inverse = new Dictionary<Texture, Texture>();
-            if (state.textureBindings != null)
-            {
-                foreach (var b in state.textureBindings)
-                {
-                    if (b != null && b.copy != null && b.original != null)
-                        inverse[b.copy] = b.original;
-                }
-            }
-            if (inverse.Count == 0)
-            {
-                state.textureBindings = new List<XestrelTextureBinding>();
-                EditorUtility.SetDirty(state);
-                return;
-            }
-
-            int rewriteCount = 0;
-            if (state.bindings != null)
-            {
-                foreach (var matBinding in state.bindings)
-                {
-                    if (matBinding == null || matBinding.copy == null) continue;
-                    var copy = matBinding.copy;
-                    var shader = copy.shader;
-                    if (shader == null) continue;
-                    bool dirty = false;
-                    int count = ShaderUtil.GetPropertyCount(shader);
-                    for (int i = 0; i < count; i++)
-                    {
-                        if (ShaderUtil.GetPropertyType(shader, i) != ShaderUtil.ShaderPropertyType.TexEnv) continue;
-                        var propName = ShaderUtil.GetPropertyName(shader, i);
-                        var tex = copy.GetTexture(propName);
-                        if (tex == null) continue;
-                        if (inverse.TryGetValue(tex, out var orig))
-                        {
-                            if (!dirty) Undo.RecordObject(copy, "Xestrel Restore Textures");
-                            copy.SetTexture(propName, orig);
-                            EditorUtility.SetDirty(copy);
-                            dirty = true;
-                        }
-                    }
-                    if (dirty) rewriteCount++;
-                }
-            }
+            var cleared = state.textureBindings?.Count ?? 0;
 
             Undo.RecordObject(state, "Xestrel Restore Textures");
             state.textureBindings = new List<XestrelTextureBinding>();
             EditorUtility.SetDirty(state);
             XestrelLog.Info(XestrelLogCategory.Isolate,
-                $"Restored textures for '{state.avatarName}': {rewriteCount} materials reverted (copy texture assets left on disk)");
+                $"Cleared {cleared} texture binding(s) for '{state.avatarName}' (copy materials and texture assets left as-is)");
         }
     }
 }
