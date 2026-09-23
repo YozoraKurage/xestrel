@@ -36,6 +36,7 @@ namespace Xestrel.UI
             public Texture texture;
             public bool isolated;
             public Texture original; // recorded original when `texture` is one of our copies
+            public Texture recordedCopy; // recorded copy when `texture` is a shared original
             public readonly List<string> uses = new List<string>();
         }
 
@@ -59,6 +60,8 @@ namespace Xestrel.UI
         private bool _prefabAssetHasCopies;
         // Copies in the workspace folder that nothing references or tracks any more.
         private List<Object> _unusedCopies = new List<Object>();
+        // Texture slots pointing at a shared original although a copy of it is recorded.
+        private int _reapplyCount;
         // What was added to the avatar relative to its base prefab (derived, never stored).
         private AvatarAdditionsReport _additionsReport = new AvatarAdditionsReport();
         private sealed class AdditionRow
@@ -155,6 +158,7 @@ namespace Xestrel.UI
             RebuildRecoverCandidates();
             DetectPrefabAssetCopies();
             _unusedCopies = WorkspaceAudit.CollectUnusedCopies(CurrentState);
+            _reapplyCount = TextureIsolator.CountReapplicable(CurrentState);
             RebuildAdditions();
         }
 
@@ -321,6 +325,7 @@ namespace Xestrel.UI
                             texture = tex,
                             isolated = IsolationPaths.IsUnderIsolationRoot(AssetDatabase.GetAssetPath(tex)),
                             original = TextureIsolator.FindOriginal(state, tex),
+                            recordedCopy = TextureIsolator.FindRecordedCopy(state, tex),
                         };
                         byTexture[tex] = entry;
                         _textures.Add(entry);
@@ -606,6 +611,25 @@ namespace Xestrel.UI
                 }
             }
 
+            if (_reapplyCount > 0)
+            {
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    EditorGUILayout.HelpBox(
+                        $"コピー済みの記録があるのに、共有元を指しているテクスチャスロットが {_reapplyCount} 個あります" +
+                        "（スロット単位の「元に戻す」や、同じコピーを使う別シーンのアバターでの操作など）。" +
+                        "「再適用」で記録済みのコピーに付け直せます（新しいコピーは作りません）。",
+                        MessageType.Info);
+                    if (GUILayout.Button(new GUIContent("再適用",
+                            "記録済みのテクスチャコピーを、共有元に戻っているスロットへまとめて付け直します"),
+                        GUILayout.Width(60), GUILayout.Height(52)))
+                    {
+                        TextureIsolator.ReapplyRecordedCopies(state);
+                        _cachesDirty = true;
+                    }
+                }
+            }
+
             var matCount = state.bindings?.Count ?? 0;
             var texCount = state.textureBindings?.Count ?? 0;
             var animCount = state.animatorBindings?.Count ?? 0;
@@ -743,7 +767,7 @@ namespace Xestrel.UI
             {
                 GUILayout.FlexibleSpace();
                 if (GUILayout.Button(new GUIContent("テクスチャを全部専用化",
-                        "このマテリアルが使っている共有テクスチャをすべてコピーして差し替えます"),
+                        "このマテリアルが使っている共有テクスチャをすべてコピーして差し替えます（コピー済みの記録があるものは既存のコピーを再利用します）"),
                     EditorStyles.miniButton, GUILayout.Width(140)))
                 {
                     TextureIsolator.IsolateAllProperties(state, b.copy);
@@ -902,9 +926,13 @@ namespace Xestrel.UI
             {
                 using (new EditorGUI.DisabledScope(current == null || isolated || state == null))
                 {
-                    var btnLabel = current == null ? "—" : (isolated ? "専用化済" : "専用化");
-                    if (GUI.Button(buttonRect, new GUIContent(btnLabel,
-                            "このテクスチャをコピーして、このスロットだけコピーに差し替えます"), EditorStyles.miniButton))
+                    var recordedCopy = isolated ? null : TextureIsolator.FindRecordedCopy(state, current);
+                    var btnContent = current == null ? new GUIContent("—")
+                        : isolated ? new GUIContent("専用化済")
+                        : recordedCopy != null
+                            ? new GUIContent("再適用", $"記録済みのコピー「{recordedCopy.name}」に付け直します（新しいコピーは作りません）")
+                            : new GUIContent("専用化", "このテクスチャをコピーして、このスロットだけコピーに差し替えます");
+                    if (GUI.Button(buttonRect, btnContent, EditorStyles.miniButton))
                     {
                         TextureIsolator.IsolateProperty(state, copy, propName);
                         _cachesDirty = true;
@@ -1021,9 +1049,12 @@ namespace Xestrel.UI
 
                 if (!entry.isolated)
                 {
-                    if (GUI.Button(actionRect, new GUIContent("専用化",
-                            "このテクスチャをコピーし、使っている全スロットをコピーに差し替えます"),
-                        EditorStyles.miniButton))
+                    var content = entry.recordedCopy != null
+                        ? new GUIContent("再適用",
+                            $"記録済みのコピー「{entry.recordedCopy.name}」に、使っている全スロットを付け直します（新しいコピーは作りません）")
+                        : new GUIContent("専用化",
+                            "このテクスチャをコピーし、使っている全スロットをコピーに差し替えます");
+                    if (GUI.Button(actionRect, content, EditorStyles.miniButton))
                     {
                         TextureIsolator.IsolateTextureAcrossMaterials(state, entry.texture);
                         _cachesDirty = true;

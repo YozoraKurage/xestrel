@@ -315,6 +315,29 @@ namespace Xestrel.Tests
         }
 
         [Test]
+        public void TextureIsolator_ReapplyRecordedCopies_RewiresRevertedSlotsWithoutNewCopies()
+        {
+            MaterialIsolator.Isolate(_avatar);
+            var state = _avatar.GetComponent<XestrelMaterialIsolation>();
+            var copyMat = state.bindings[0].copy;
+            var copyTex = TextureIsolator.IsolateProperty(state, copyMat, "_MainTex");
+            Assert.That(TextureIsolator.CountReapplicable(state), Is.EqualTo(0));
+
+            // Simulates the copy material being reverted from elsewhere (another avatar
+            // sharing it); the binding on this avatar survives.
+            copyMat.mainTexture = _sourceTex;
+            Assert.That(TextureIsolator.FindRecordedCopy(state, _sourceTex), Is.SameAs(copyTex));
+            Assert.That(TextureIsolator.CountReapplicable(state), Is.EqualTo(1));
+
+            var rewired = TextureIsolator.ReapplyRecordedCopies(state);
+
+            Assert.That(rewired, Is.EqualTo(1));
+            Assert.That(copyMat.mainTexture, Is.SameAs(copyTex));
+            Assert.That(state.textureBindings.Count, Is.EqualTo(1), "no new copy is created");
+            Assert.That(TextureIsolator.CountReapplicable(state), Is.EqualTo(0));
+        }
+
+        [Test]
         public void MaterialRestoreBinding_RevertsSingleMaterialOnly()
         {
             MaterialIsolator.Isolate(_avatar);

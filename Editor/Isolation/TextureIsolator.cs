@@ -31,18 +31,7 @@ namespace Xestrel.Isolation
             if (IsolationPaths.IsUnderIsolationRoot(path)) return current;
 
             // Reuse an existing copy if we already isolated this source somewhere.
-            Texture copy = null;
-            if (state.textureBindings != null)
-            {
-                foreach (var b in state.textureBindings)
-                {
-                    if (b != null && b.original == current && b.copy != null)
-                    {
-                        copy = b.copy;
-                        break;
-                    }
-                }
-            }
+            var copy = FindRecordedCopy(state, current);
 
             if (copy == null)
             {
@@ -184,6 +173,75 @@ namespace Xestrel.Isolation
                 if (b != null && b.copy == copy && b.original != null) return b.original;
             }
             return null;
+        }
+
+        /// <summary>
+        /// Find the copy already recorded for a shared <paramref name="original"/>, or
+        /// null when this avatar has never isolated it. Isolating a property whose
+        /// texture has a recorded copy reuses that copy instead of creating a new one.
+        /// </summary>
+        public static Texture FindRecordedCopy(XestrelMaterialIsolation state, Texture original)
+        {
+            if (state == null || original == null || state.textureBindings == null) return null;
+            foreach (var b in state.textureBindings)
+            {
+                if (b != null && b.original == original && b.copy != null) return b.copy;
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// Count the texture properties on this avatar's copy materials that point at a
+        /// shared original even though a copy of it is recorded — e.g. after a per-slot
+        /// Restore, or a Restore on an unforked duplicate that shares the copy materials.
+        /// </summary>
+        public static int CountReapplicable(XestrelMaterialIsolation state) =>
+            WalkReapplicable(state, apply: false);
+
+        /// <summary>
+        /// Point every property counted by <see cref="CountReapplicable"/> back at its
+        /// recorded copy. Never creates new copies. Returns the number of properties rewired.
+        /// </summary>
+        public static int ReapplyRecordedCopies(XestrelMaterialIsolation state)
+        {
+            var rewired = WalkReapplicable(state, apply: true);
+            if (rewired > 0)
+            {
+                AssetDatabase.SaveAssets();
+                XestrelLog.Info(XestrelLogCategory.Isolate,
+                    $"Re-applied recorded texture copies on '{state.avatarName}': {rewired} propert(ies) rewired");
+            }
+            return rewired;
+        }
+
+        private static int WalkReapplicable(XestrelMaterialIsolation state, bool apply)
+        {
+            if (state == null || state.bindings == null ||
+                state.textureBindings == null || state.textureBindings.Count == 0) return 0;
+
+            int n = 0;
+            foreach (var mb in state.bindings)
+            {
+                if (mb == null || mb.copy == null) continue;
+                var shader = mb.copy.shader;
+                if (shader == null) continue;
+                bool recorded = false;
+                int count = ShaderUtil.GetPropertyCount(shader);
+                for (int i = 0; i < count; i++)
+                {
+                    if (ShaderUtil.GetPropertyType(shader, i) != ShaderUtil.ShaderPropertyType.TexEnv) continue;
+                    var propName = ShaderUtil.GetPropertyName(shader, i);
+                    var copy = FindRecordedCopy(state, mb.copy.GetTexture(propName));
+                    if (copy == null) continue;
+                    n++;
+                    if (!apply) continue;
+                    if (!recorded) Undo.RecordObject(mb.copy, "Xestrel Re-apply Textures");
+                    recorded = true;
+                    mb.copy.SetTexture(propName, copy);
+                    EditorUtility.SetDirty(mb.copy);
+                }
+            }
+            return n;
         }
 
         /// <summary>
