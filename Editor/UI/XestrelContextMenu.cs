@@ -7,8 +7,8 @@ namespace Xestrel.UI
 {
     internal static class XestrelContextMenu
     {
-        private const string IsolateMenuPath = "GameObject/Xestrel/Isolate Materials";
-        private const string WindowMenuPath = "GameObject/Xestrel/Open Asset Isolation";
+        private const string IsolateMenuPath = "GameObject/Xestrel/マテリアルを専用コピー化";
+        private const string WindowMenuPath = "GameObject/Xestrel/アセット専用化ウィンドウを開く";
 
         [MenuItem(IsolateMenuPath, false, 30)]
         private static void IsolateFromMenu(MenuCommand cmd)

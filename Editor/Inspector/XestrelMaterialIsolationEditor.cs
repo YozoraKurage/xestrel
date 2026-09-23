@@ -13,19 +13,20 @@ namespace Xestrel.Inspector
         {
             var state = (XestrelMaterialIsolation)target;
 
-            EditorGUILayout.LabelField("Avatar", state.avatarName ?? "<unset>");
-            EditorGUILayout.LabelField("Materials", (state.bindings?.Count ?? 0).ToString());
-            EditorGUILayout.LabelField("Textures", (state.textureBindings?.Count ?? 0).ToString());
-            EditorGUILayout.LabelField("Animators", (state.animatorBindings?.Count ?? 0).ToString());
-            EditorGUILayout.LabelField("Clips", (state.clipBindings?.Count ?? 0).ToString());
+            EditorGUILayout.LabelField("アバター", state.avatarName ?? "<未設定>");
+            EditorGUILayout.LabelField("マテリアル", (state.bindings?.Count ?? 0).ToString());
+            EditorGUILayout.LabelField("テクスチャ", (state.textureBindings?.Count ?? 0).ToString());
+            EditorGUILayout.LabelField("アニメーター", (state.animatorBindings?.Count ?? 0).ToString());
+            EditorGUILayout.LabelField("アニメーションクリップ", (state.clipBindings?.Count ?? 0).ToString());
 
             if (Isolator.HasDeadBindings(state))
             {
                 EditorGUILayout.Space();
                 using (new EditorGUILayout.HorizontalScope())
                 {
-                    EditorGUILayout.HelpBox("Some bindings reference deleted assets.", MessageType.Warning);
-                    if (GUILayout.Button("Prune", GUILayout.Width(60), GUILayout.Height(38)))
+                    EditorGUILayout.HelpBox("削除されたアセットを指している対応記録があります。", MessageType.Warning);
+                    if (GUILayout.Button(new GUIContent("記録を\n掃除", "削除済みアセットを指す対応記録を取り除きます"),
+                            GUILayout.Width(60), GUILayout.Height(38)))
                     {
                         Isolator.PruneDeadBindings(state);
                     }
@@ -35,22 +36,22 @@ namespace Xestrel.Inspector
             EditorGUILayout.Space();
             using (new EditorGUILayout.HorizontalScope())
             {
-                if (GUILayout.Button("Open Window"))
+                if (GUILayout.Button("ウィンドウを開く"))
                 {
                     XestrelIsolationWindow.OpenFor(state);
                 }
-                if (GUILayout.Button("Re-isolate"))
+                if (GUILayout.Button(new GUIContent("専用コピーを作成", "まだ共有のままのマテリアルを専用コピーにします（専用化済みのものはそのまま）")))
                 {
                     Isolator.Isolate(state.gameObject);
                 }
-                if (GUILayout.Button("Restore"))
+                if (GUILayout.Button(new GUIContent("すべて元に戻す", "参照をコピー前の共有アセットに戻します（コピーはディスクに残ります）")))
                 {
                     if (EditorUtility.DisplayDialog(
-                            "Xestrel — Restore",
-                            $"Point \"{state.avatarName}\" back at the original shared assets?\n\n" +
-                            "All material / texture / animator bindings will be cleared. " +
-                            "Copy assets under Assets/Xestrel/ stay on disk.",
-                            "Restore", "Cancel"))
+                            "Xestrel — すべて元に戻す",
+                            $"「{state.avatarName}」の参照を、コピー前の共有アセットに戻しますか？\n\n" +
+                            "マテリアル / テクスチャ / アニメーターの対応記録はすべて消去されます。" +
+                            "Assets/Xestrel/ 以下のコピーファイルは削除されずに残ります。",
+                            "元に戻す", "キャンセル"))
                     {
                         Isolator.Restore(state);
                     }
@@ -59,8 +60,8 @@ namespace Xestrel.Inspector
 
             EditorGUILayout.Space();
             EditorGUILayout.HelpBox(
-                "This component is stripped on VRChat upload via IEditorOnly. Per-avatar copies under " +
-                "Assets/Xestrel/ are referenced by the avatar's Renderers / VRCAvatarDescriptor and are uploaded normally.",
+                "このコンポーネントは IEditorOnly のため VRChat アップロード時に除去されます。Assets/Xestrel/ 以下の" +
+                "専用コピーはアバターの Renderer / VRCAvatarDescriptor から参照されるので、通常どおりアップロードされます。",
                 MessageType.Info);
         }
     }
