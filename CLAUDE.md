@@ -44,5 +44,6 @@ Material / Texture / Prefab / AnimatorController の実物・エラーログに�
   確かめたいときは `add-vpm.sh <パッケージ名>`。
 - 初回だけ Unity Personal ライセンスの有効化が要る: `.devcontainer/unity/activate-license.sh --status`
   で状態を確認できる。未設定なら手順が表示されるが、ブラウザ操作を含むのでユーザーに依頼すること
-  （.alf を生成して temp~/ に出し、ユーザーが Web で .ulf を発行して temp~/ に置く →
-  `activate-license.sh --install temp~/<file>.ulf` → `setup.sh`）。
+  （Personal の .alf オフライン認証は Unity が廃止したので、ユーザーにホストの Unity Hub の
+  `Unity_lic.ulf`（Windows: `C:\ProgramData\Unity\Unity_lic.ulf`）を temp~/ に置いてもらう →
+  `activate-license.sh --install temp~/Unity_lic.ulf` → `setup.sh`）。

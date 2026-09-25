@@ -2,13 +2,13 @@
 # Unity Personal ライセンスの手動アクティベーション。
 #
 #   activate-license.sh --login               Unity ID でログインして有効化する
-#   activate-license.sh --create-alf          .alf を生成する
+#   activate-license.sh --create-alf          .alf を生成する（Personal では使えなくなった。Pro/Plus 用）
 #   activate-license.sh --install <file.ulf>  .ulf を取り込む
 #   activate-license.sh --return              シートを返却する
 #   activate-license.sh --status              現在の状態を表示する
 #
-# batchmode でもライセンスは必須。--login が通ればそれが一番早い。2 要素認証を
-# 使っている場合は通らないので、.alf → ブラウザ → .ulf の手動経路を使う。
+# batchmode でもライセンスは必須。Personal は .alf のオフライン認証が廃止されたので、
+# ホストの Unity Hub で取得済みの Unity_lic.ulf を --install で取り込むのが確実。
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 

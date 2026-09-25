@@ -73,27 +73,25 @@ license_hint() {
 
 Unity のライセンスがまだ有効化されていない。1 回だけ次のどちらかが要る。
 
-[A] Unity ID でログインして有効化する（ブラウザ不要・こちらが速い）
+[A] Unity Hub で取った .ulf を持ち込む（推奨・game-ci の方式）
+
+  Unity は Personal の .alf オフライン認証（license.unity3d.com/manual）を廃止した。
+  代わりに、ホスト側の Unity Hub で取得済みの .ulf をそのまま使う。
+  （Hub: Preferences → Licenses → Add → Get a free personal license）
+
+  1. ホストの .ulf を temp~/ にコピーする
+       Windows: C:\ProgramData\Unity\Unity_lic.ulf
+       Mac:     /Library/Application Support/Unity/Unity_lic.ulf
+       Linux:   ~/.local/share/unity3d/Unity/Unity_lic.ulf
+  2. .devcontainer/unity/activate-license.sh --install temp~/Unity_lic.ulf
+
+[B] Unity ID でログインして有効化する（通らない場合あり）
 
      export UNITY_EMAIL='you@example.com'
      read -rs UNITY_PASSWORD && export UNITY_PASSWORD
      .devcontainer/unity/activate-license.sh --login
 
-  2 要素認証を有効にしていると通らない。その場合は [B]。
-  シートを 1 つ消費するので、コンテナを捨てる前に --return で返却すること。
-
-[B] .alf / .ulf を手動で交換する
-
-  1. .devcontainer/unity/activate-license.sh --create-alf
-     → /workspace/temp~/ に Unity_v2022.3.22f1.alf が出る（ホストからも見える）
-  2. https://license.unity3d.com/manual に .alf をアップロード
-     ※ Unity は Personal の選択肢を CSS で隠している。シリアル入力欄しか
-       出ない場合は、その欄を右クリック →「検証」→ Elements で
-       `option-personal` を検索し、
-       <div class="option option-personal clear" style="display: none;">
-       の style="display: none;" を消すとラジオが現れる。
-  3. 落ちてきた .ulf を /workspace/temp~/ に置いて:
-     .devcontainer/unity/activate-license.sh --install temp~/Unity_v2022.x.ulf
+  2 要素認証を有効にしていると通らない。
 
 temp~/ は .gitignore 済み、かつ Unity のインポート対象外なので安全。
 EOS
