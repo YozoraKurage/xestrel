@@ -41,8 +41,10 @@ namespace Xestrel.Tests
         public void TearDown()
         {
             if (_instance != null) Object.DestroyImmediate(_instance);
-            AssetDatabase.DeleteAsset(TestDir);
+            // Copies first: deleting the models first makes the copies re-import with a
+            // missing variant parent, which logs an error and fails the test.
             AssetDatabase.DeleteAsset("Assets/Xestrel");
+            AssetDatabase.DeleteAsset(TestDir);
             AssetDatabase.SaveAssets();
         }
 
@@ -53,14 +55,16 @@ namespace Xestrel.Tests
             armature.SetParent(root.transform);
             new GameObject("Hips").transform.SetParent(armature);
             var path = $"{TestDir}/{name}.prefab";
-            var asset = PrefabUtility.SaveAsPrefabAsset(root, path);
+            PrefabUtility.SaveAsPrefabAsset(root, path);
             Object.DestroyImmediate(root);
 
             // A sub-asset with the same name in every model, like an FBX's mesh.
             var mesh = new Mesh { name = "BodyMesh" };
             AssetDatabase.AddObjectToAsset(mesh, path);
             AssetDatabase.SaveAssets();
-            return asset;
+            // Adding the sub-asset re-imports the prefab; load the root afresh so
+            // identity comparisons against what Unity returns later hold.
+            return AssetDatabase.LoadAssetAtPath<GameObject>(path);
         }
 
         [Test]

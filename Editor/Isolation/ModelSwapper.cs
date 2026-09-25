@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using UnityEditor;
-using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using Xestrel.Core;
 using Xestrel.Detection;
 using Xestrel.Runtime;
@@ -109,7 +109,7 @@ namespace Xestrel.Isolation
                 {
                     var dst = AssetDatabase.GenerateUniqueAssetPath(
                         dir + "/" + XestrelPaths.SanitiseFileSegment(variants[i].name) + "__xestrel.prefab");
-                    newBase = BuildRebasedVariant(variants[i], newBase, dst, oldModelPath, newModel);
+                    newBase = BuildRebasedVariant(variants[i], newBase, dst, oldModelPath, newModel, avatarRoot.scene);
                     copies.Insert(0, newBase);
                 }
             }
@@ -192,17 +192,21 @@ namespace Xestrel.Isolation
         /// Save a new variant of <paramref name="newBase"/> at <paramref name="dstPath"/>
         /// carrying <paramref name="variant"/>'s overrides and additions. Unity refuses to
         /// replace the parent of a variant asset in place, so instead: instantiate the
-        /// variant in a preview scene, unpack its outermost root (leaving an instance of
-        /// its base with the variant's changes as instance overrides), replace that
-        /// instance's prefab asset, and save the result as a prefab.
+        /// variant temporarily in <paramref name="scene"/>, unpack its outermost root
+        /// (leaving an instance of its base with the variant's changes as instance
+        /// overrides), replace that instance's prefab asset, and save the result as a prefab.
+        /// The scene must be a regular scene: in a preview scene Unity treats the root as
+        /// a variant being edited and refuses the replace just the same. Opening an extra
+        /// additive scene is not an option either (Unity refuses while an untitled scene
+        /// is unsaved), so the avatar's own scene hosts the temporary instance.
         /// </summary>
         private static GameObject BuildRebasedVariant(GameObject variant, GameObject newBase, string dstPath,
-            string oldModelPath, GameObject newModel)
+            string oldModelPath, GameObject newModel, Scene scene)
         {
-            var scene = EditorSceneManager.NewPreviewScene();
+            GameObject instance = null;
             try
             {
-                var instance = (GameObject)PrefabUtility.InstantiatePrefab(variant, scene);
+                instance = (GameObject)PrefabUtility.InstantiatePrefab(variant, scene);
                 if (instance == null) throw new System.Exception($"could not instantiate {variant.name}");
                 PrefabUtility.UnpackPrefabInstance(instance, PrefabUnpackMode.OutermostRoot, InteractionMode.AutomatedAction);
                 PrefabUtility.ReplacePrefabAssetOfPrefabInstance(instance, newBase, Settings, InteractionMode.AutomatedAction);
@@ -213,7 +217,7 @@ namespace Xestrel.Isolation
             }
             finally
             {
-                EditorSceneManager.ClosePreviewScene(scene);
+                if (instance != null) Object.DestroyImmediate(instance);
             }
         }
 

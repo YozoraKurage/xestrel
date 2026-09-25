@@ -351,6 +351,9 @@ namespace Xestrel.Tests
             Assert.That(state.bindings, Is.Empty);
         }
 
+        // Fork tests compare assets with EqualTo (instance identity), not SameAs: after
+        // Instantiate / asset saves Unity may hand out a second managed wrapper for the
+        // same native object, which makes SameAs fail and Not.SameAs pass vacuously.
         [Test]
         public void Fork_GivesDuplicateIndependentCopies()
         {
@@ -366,7 +369,7 @@ namespace Xestrel.Tests
             try
             {
                 Assert.That(dup.GetComponentInChildren<MeshRenderer>().sharedMaterials[0],
-                    Is.SameAs(sourceCopyMat), "precondition: the duplicate shares the copy");
+                    Is.EqualTo(sourceCopyMat), "precondition: the duplicate shares the copy");
 
                 var ok = WorkspaceForker.Fork(dupState);
 
@@ -374,26 +377,26 @@ namespace Xestrel.Tests
                 Assert.That(dupState.avatarName, Is.Not.EqualTo(state.avatarName));
 
                 var forkMat = dup.GetComponentInChildren<MeshRenderer>().sharedMaterials[0];
-                Assert.That(forkMat, Is.Not.SameAs(sourceCopyMat));
+                Assert.That(forkMat, Is.Not.EqualTo(sourceCopyMat));
                 Assert.That(AssetDatabase.GetAssetPath(forkMat),
                     Does.StartWith($"Assets/Xestrel/{dupState.avatarName}/"));
 
-                Assert.That(forkMat.mainTexture, Is.Not.SameAs(sourceCopyTex),
+                Assert.That(forkMat.mainTexture, Is.Not.EqualTo(sourceCopyTex),
                     "the texture copy must be forked too");
                 Assert.That(AssetDatabase.GetAssetPath(forkMat.mainTexture),
                     Does.StartWith($"Assets/Xestrel/{dupState.avatarName}/"));
 
-                Assert.That(dupState.bindings[0].original, Is.SameAs(_sourceMat),
+                Assert.That(dupState.bindings[0].original, Is.EqualTo(_sourceMat),
                     "fork bindings keep pointing at the true shared original");
-                Assert.That(dupState.bindings[0].copy, Is.SameAs(forkMat));
-                Assert.That(dupState.textureBindings[0].original, Is.SameAs(_sourceTex));
-                Assert.That(dupState.textureBindings[0].copy, Is.SameAs(forkMat.mainTexture));
+                Assert.That(dupState.bindings[0].copy, Is.EqualTo(forkMat));
+                Assert.That(dupState.textureBindings[0].original, Is.EqualTo(_sourceTex));
+                Assert.That(dupState.textureBindings[0].copy, Is.EqualTo(forkMat.mainTexture));
 
                 // The source avatar and its workspace are untouched.
                 Assert.That(_avatar.GetComponentInChildren<MeshRenderer>().sharedMaterials[0],
-                    Is.SameAs(sourceCopyMat));
-                Assert.That(sourceCopyMat.mainTexture, Is.SameAs(sourceCopyTex));
-                Assert.That(state.bindings[0].copy, Is.SameAs(sourceCopyMat));
+                    Is.EqualTo(sourceCopyMat));
+                Assert.That(sourceCopyMat.mainTexture, Is.EqualTo(sourceCopyTex));
+                Assert.That(state.bindings[0].copy, Is.EqualTo(sourceCopyMat));
             }
             finally
             {
@@ -414,26 +417,26 @@ namespace Xestrel.Tests
             try
             {
                 Assert.That(dup, Is.Not.Null);
-                Assert.That(dup, Is.Not.SameAs(_avatar));
+                Assert.That(dup, Is.Not.EqualTo(_avatar));
 
                 var dupState = dup.GetComponent<XestrelMaterialIsolation>();
                 Assert.That(dupState, Is.Not.Null);
                 Assert.That(dupState.avatarName, Is.Not.EqualTo(state.avatarName));
 
                 var dupMat = dup.GetComponentInChildren<MeshRenderer>().sharedMaterials[0];
-                Assert.That(dupMat, Is.Not.SameAs(sourceCopyMat));
+                Assert.That(dupMat, Is.Not.EqualTo(sourceCopyMat));
                 Assert.That(AssetDatabase.GetAssetPath(dupMat),
                     Does.StartWith($"Assets/Xestrel/{dupState.avatarName}/"));
-                Assert.That(dupMat.mainTexture, Is.Not.SameAs(sourceCopyTex),
+                Assert.That(dupMat.mainTexture, Is.Not.EqualTo(sourceCopyTex),
                     "the duplicate inherits the isolated texture as its own fork");
-                Assert.That(dupState.bindings[0].original, Is.SameAs(_sourceMat),
+                Assert.That(dupState.bindings[0].original, Is.EqualTo(_sourceMat),
                     "fork bindings keep pointing at the true shared original");
 
                 // The source avatar and its workspace are untouched.
                 Assert.That(_avatar.GetComponentInChildren<MeshRenderer>().sharedMaterials[0],
-                    Is.SameAs(sourceCopyMat));
-                Assert.That(state.bindings[0].copy, Is.SameAs(sourceCopyMat));
-                Assert.That(state.textureBindings[0].copy, Is.SameAs(sourceCopyTex));
+                    Is.EqualTo(sourceCopyMat));
+                Assert.That(state.bindings[0].copy, Is.EqualTo(sourceCopyMat));
+                Assert.That(state.textureBindings[0].copy, Is.EqualTo(sourceCopyTex));
             }
             finally
             {
