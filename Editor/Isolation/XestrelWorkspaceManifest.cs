@@ -38,6 +38,7 @@ namespace Xestrel.Isolation
         public List<XestrelTextureBinding> textureBindings = new List<XestrelTextureBinding>();
         public List<XestrelAnimatorBinding> animatorBindings = new List<XestrelAnimatorBinding>();
         public List<XestrelClipBinding> clipBindings = new List<XestrelClipBinding>();
+        public List<XestrelModelSwapBinding> modelSwaps = new List<XestrelModelSwapBinding>();
 
         public List<XestrelGuidRecord> guidHistory = new List<XestrelGuidRecord>();
     }

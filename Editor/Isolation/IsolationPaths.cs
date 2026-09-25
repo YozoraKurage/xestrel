@@ -24,6 +24,9 @@ namespace Xestrel.Isolation
         public static string AnimationsDir(string avatarName) =>
             AvatarDir(avatarName) + "/Animations";
 
+        public static string PrefabsDir(string avatarName) =>
+            AvatarDir(avatarName) + "/Prefabs";
+
         /// <summary>
         /// True if the given asset path lives under the isolated materials folder for any avatar.
         /// </summary>

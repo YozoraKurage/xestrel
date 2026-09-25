@@ -18,6 +18,12 @@ namespace Xestrel.Inspector
             EditorGUILayout.LabelField("テクスチャ", (state.textureBindings?.Count ?? 0).ToString());
             EditorGUILayout.LabelField("アニメーター", (state.animatorBindings?.Count ?? 0).ToString());
             EditorGUILayout.LabelField("アニメーションクリップ", (state.clipBindings?.Count ?? 0).ToString());
+            var swap = ModelSwapper.CurrentSwap(state);
+            if (swap != null)
+            {
+                EditorGUILayout.LabelField("FBX 差し替え",
+                    $"{(swap.originalModel != null ? swap.originalModel.name : "?")} → {(swap.newModel != null ? swap.newModel.name : "?")}");
+            }
 
             if (Isolator.HasDeadBindings(state))
             {
@@ -49,7 +55,7 @@ namespace Xestrel.Inspector
                     if (EditorUtility.DisplayDialog(
                             "Xestrel — すべて元に戻す",
                             $"「{state.avatarName}」の参照を、コピー前の共有アセットに戻しますか？\n\n" +
-                            "マテリアル / テクスチャ / アニメーターの対応記録はすべて消去されます。" +
+                            "マテリアル / テクスチャ / アニメーターの対応記録はすべて消去され、FBX を差し替えている場合は元の FBX に戻ります。" +
                             "Assets/Xestrel/ 以下のコピーファイルは削除されずに残ります。",
                             "元に戻す", "キャンセル"))
                     {

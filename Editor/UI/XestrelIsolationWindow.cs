@@ -213,6 +213,8 @@ namespace Xestrel.UI
             {
                 foreach (var m in r.sharedMaterials) AddWorkspaceOf(m, result);
             }
+            // A swapped model leaves the instance pointing at a prefab copy in the workspace.
+            AddWorkspaceOf(PrefabUtility.GetCorrespondingObjectFromSource(_avatar), result);
             var desc = _avatar.GetComponent<VRCAvatarDescriptor>();
             if (desc != null)
             {
@@ -417,7 +419,7 @@ namespace Xestrel.UI
             using (new EditorGUI.DisabledScope(_avatar == null))
             {
                 if (GUI.Button(swapRect, new GUIContent("FBX 差し替え",
-                        "元になっている FBX を別の FBX に差し替えたとき、何が引き継がれないかをチェックします（読み取りのみ）"),
+                        "元になっている FBX を、ほぼ同じ別の FBX に差し替えます（事前チェック付き・元の FBX と Prefab は変更しません）"),
                         EditorStyles.miniButton))
                 {
                     XestrelModelSwapWindow.OpenFor(_avatar);
@@ -469,7 +471,7 @@ namespace Xestrel.UI
                     using (new EditorGUI.DisabledScope(CurrentState == null))
                     {
                         if (GUILayout.Button(new GUIContent("すべて元に戻す",
-                                "マテリアル / テクスチャ / アニメーターの参照を、コピー前の共有アセットに戻します（コピーはディスクに残ります）"),
+                                "マテリアル / テクスチャ / アニメーター（と FBX の差し替え）を、コピー前の共有アセットに戻します（コピーはディスクに残ります）"),
                             GUILayout.Height(24)) && ConfirmRestoreAll())
                         {
                             Isolator.Restore(CurrentState);
@@ -526,7 +528,7 @@ namespace Xestrel.UI
             return EditorUtility.DisplayDialog(
                 "Xestrel — すべて元に戻す",
                 $"「{name}」の参照を、コピー前の共有アセットに戻しますか？\n\n" +
-                "マテリアル / テクスチャ / アニメーターの対応記録はすべて消去されます。" +
+                "マテリアル / テクスチャ / アニメーターの対応記録はすべて消去され、FBX を差し替えている場合は元の FBX に戻ります。" +
                 "Assets/Xestrel/ 以下のコピーファイルは削除されずに残ります。",
                 "元に戻す", "キャンセル");
         }
@@ -637,10 +639,38 @@ namespace Xestrel.UI
                 }
             }
 
+            var swap = ModelSwapper.CurrentSwap(state);
+            if (swap != null)
+            {
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    var from = swap.originalModel != null ? swap.originalModel.name : "?";
+                    var to = swap.newModel != null ? swap.newModel.name : "(見つかりません)";
+                    EditorGUILayout.HelpBox(
+                        $"FBX を差し替えています: {from} → {to}\n" +
+                        "元の Prefab と FBX は変更していません（差し替え用の Prefab コピーを使っています）。",
+                        MessageType.Info);
+                    if (GUILayout.Button(new GUIContent("FBX を\n元に戻す",
+                            "アバターを差し替え前の Prefab に戻します（Prefab コピーはディスクに残ります）"),
+                        GUILayout.Width(72), GUILayout.Height(40)) &&
+                        EditorUtility.DisplayDialog(
+                            "Xestrel — FBX を元に戻す",
+                            $"「{_avatar.name}」を差し替え前の Prefab（{from}）に戻しますか？\n\n" +
+                            "シーン上で追加・変更した内容は、対応が取れる限り引き継がれます。",
+                            "元に戻す", "キャンセル"))
+                    {
+                        ModelSwapper.Restore(state);
+                        _cachesDirty = true;
+                        GUIUtility.ExitGUI();
+                    }
+                }
+            }
+
             var matCount = state.bindings?.Count ?? 0;
             var texCount = state.textureBindings?.Count ?? 0;
             var animCount = state.animatorBindings?.Count ?? 0;
             var clipCount = state.clipBindings?.Count ?? 0;
+            if (matCount == 0 && animCount == 0 && swap != null) return;
             if (matCount == 0 && animCount == 0)
             {
                 EditorGUILayout.HelpBox("専用コピーの記録がありません。「専用コピーを作成」を押してください。", MessageType.Info);

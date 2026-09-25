@@ -2,12 +2,15 @@ using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
 using Xestrel.Detection;
+using Xestrel.Isolation;
+using Xestrel.Runtime;
 
 namespace Xestrel.UI
 {
     /// <summary>
-    /// Pre-flight check for swapping the FBX an avatar is built on. Read-only: it only
-    /// runs <see cref="ModelSwapValidator"/> and lists what would not carry over.
+    /// Swapping the FBX an avatar is built on. The check (<see cref="ModelSwapValidator"/>)
+    /// is read-only and must run before the swap itself (<see cref="ModelSwapper"/>)
+    /// is offered.
     /// </summary>
     internal sealed class XestrelModelSwapWindow : EditorWindow
     {
@@ -18,11 +21,11 @@ namespace Xestrel.UI
         private Vector2 _scroll;
         private bool _showInfo;
 
-        [MenuItem("Window/Xestrel/FBX Swap Check")]
+        [MenuItem("Window/Xestrel/FBX Swap")]
         public static void Open()
         {
             var w = GetWindow<XestrelModelSwapWindow>();
-            w.titleContent = new GUIContent("FBX 差し替えチェック");
+            w.titleContent = new GUIContent("FBX 差し替え");
             w.minSize = new Vector2(440, 320);
             if (w._avatar == null && Selection.activeGameObject != null)
                 w.SetAvatar(AvatarRootRecogniser.ResolveAvatarRoot(Selection.activeGameObject) ?? Selection.activeGameObject);
@@ -32,7 +35,7 @@ namespace Xestrel.UI
         public static void OpenFor(GameObject avatar)
         {
             var w = GetWindow<XestrelModelSwapWindow>();
-            w.titleContent = new GUIContent("FBX 差し替えチェック");
+            w.titleContent = new GUIContent("FBX 差し替え");
             w.minSize = new Vector2(440, 320);
             if (avatar != null) w.SetAvatar(avatar);
             w.Show();
@@ -48,9 +51,12 @@ namespace Xestrel.UI
         private void OnGUI()
         {
             EditorGUILayout.HelpBox(
-                "アバターの元になっている FBX を、ほぼ同じ別の FBX に差し替えたときに何が引き継がれないかを調べます。" +
-                "このチェックは何も書き換えません。",
+                "アバターの元になっている FBX を、ほぼ同じ別の FBX に差し替えます。まず「チェック」で" +
+                "何が引き継がれないかを確認してください（チェックは何も書き換えません）。" +
+                "差し替えても元の FBX・新しい FBX・元の Prefab は変更しません。",
                 MessageType.None);
+
+            if (DrawCurrentSwap()) return;
 
             using (var check = new EditorGUI.ChangeCheckScope())
             {
@@ -88,7 +94,87 @@ namespace Xestrel.UI
             if (_report == null) return;
             EditorGUILayout.Space(4f);
             DrawSummary();
+            DrawSwapButton();
             DrawIssues();
+        }
+
+        // When the avatar is already swapped, show that and offer only the way back.
+        private bool DrawCurrentSwap()
+        {
+            var state = _avatar != null ? _avatar.GetComponent<XestrelMaterialIsolation>() : null;
+            var swap = ModelSwapper.CurrentSwap(state);
+            if (swap == null) return false;
+
+            var from = swap.originalModel != null ? swap.originalModel.name : "?";
+            var to = swap.newModel != null ? swap.newModel.name : "(見つかりません)";
+            var avatar = (GameObject)EditorGUILayout.ObjectField("アバター", _avatar, typeof(GameObject), true);
+            if (avatar != _avatar)
+            {
+                SetAvatar(avatar);
+                GUIUtility.ExitGUI();
+            }
+            EditorGUILayout.HelpBox(
+                $"このアバターは FBX を差し替え済みです: {from} → {to}\n" +
+                "別の FBX にしたい場合は、いったん元に戻してから差し替えてください。",
+                MessageType.Info);
+            if (GUILayout.Button("FBX を元に戻す", GUILayout.Height(24)) &&
+                EditorUtility.DisplayDialog("Xestrel — FBX を元に戻す",
+                    $"「{_avatar.name}」を差し替え前の Prefab（{from}）に戻しますか？\n\n" +
+                    "シーン上で追加・変更した内容は、対応が取れる限り引き継がれます。",
+                    "元に戻す", "キャンセル"))
+            {
+                ModelSwapper.Restore(state);
+                SetAvatar(_avatar);
+                GUIUtility.ExitGUI();
+            }
+            return true;
+        }
+
+        private void DrawSwapButton()
+        {
+            if (_avatar == null) return;
+            var reason = ModelSwapper.CannotSwapReason(_avatar, _newModel);
+            if (reason == null && ModelSwapValidator.FindBaseModel(_avatar) != _oldModel)
+                reason = "「元の FBX」がアバターの実際の元 FBX と違います。アバターを選び直してください。";
+            if (reason != null)
+            {
+                EditorGUILayout.HelpBox("差し替えできません: " + reason, MessageType.None);
+                return;
+            }
+
+            var errors = _report.Count(SwapSeverity.Error);
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                GUILayout.FlexibleSpace();
+                if (!GUILayout.Button(new GUIContent(errors > 0 ? "それでも差し替える" : "差し替える",
+                            "アバターの Prefab を Assets/Xestrel/ にコピーし、コピー側だけ新しい FBX をベースにして、アバターをそちらに付け替えます"),
+                        GUILayout.Height(24), GUILayout.Width(160)))
+                    return;
+            }
+
+            var warning = errors > 0
+                ? $"\n\n⚠ 失われるものが {errors} 件あります。差し替えるとアバターから外れます。" +
+                  "Prefab 側で追加したものは元に戻せば復活しますが、シーン上で追加したものは復活しません（直後なら Ctrl+Z で取り消せます）。"
+                : "";
+            if (!EditorUtility.DisplayDialog("Xestrel — FBX を差し替え",
+                    $"「{_avatar.name}」の FBX を「{_oldModel.name}」から「{_newModel.name}」に差し替えますか？\n\n" +
+                    "アバターの Prefab は Assets/Xestrel/ 以下にコピーしてから差し替えるので、元の Prefab と FBX は変更しません。" +
+                    "「元に戻す」でいつでも差し替え前に戻せます。" + warning,
+                    "差し替える", "キャンセル"))
+                return;
+
+            if (ModelSwapper.Swap(_avatar, _newModel))
+            {
+                EditorUtility.DisplayDialog("Xestrel", "FBX を差し替えました。", "OK");
+                _newModel = null;
+            }
+            else
+            {
+                EditorUtility.DisplayDialog("Xestrel",
+                    "差し替えに失敗しました。アバターは変更していません。詳細は Console を確認してください。", "OK");
+            }
+            SetAvatar(_avatar);
+            GUIUtility.ExitGUI();
         }
 
         private void DrawSummary()

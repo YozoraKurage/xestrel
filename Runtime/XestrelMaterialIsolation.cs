@@ -33,6 +33,22 @@ namespace Xestrel.Runtime
         public AnimationClip copy;
     }
 
+    /// <summary>
+    /// The avatar's base model (FBX) was swapped. The scene instance now points at
+    /// <see cref="swappedPrefab"/> — copies of its prefab variants rebased onto
+    /// <see cref="newModel"/>, or the new model itself — instead of
+    /// <see cref="originalPrefab"/>. Neither model nor the original variants are modified.
+    /// </summary>
+    [Serializable]
+    public class XestrelModelSwapBinding
+    {
+        public GameObject originalPrefab;
+        public GameObject swappedPrefab;
+        public GameObject originalModel;
+        public GameObject newModel;
+        public List<GameObject> prefabCopies = new List<GameObject>();
+    }
+
     [DisallowMultipleComponent]
     [AddComponentMenu("Xestrel/Asset Isolation")]
     public sealed class XestrelMaterialIsolation : MonoBehaviour, IEditorOnly
@@ -46,5 +62,7 @@ namespace Xestrel.Runtime
         public List<XestrelTextureBinding> textureBindings = new List<XestrelTextureBinding>();
         public List<XestrelAnimatorBinding> animatorBindings = new List<XestrelAnimatorBinding>();
         public List<XestrelClipBinding> clipBindings = new List<XestrelClipBinding>();
+        // At most one entry; a list so "not swapped" serializes as empty.
+        public List<XestrelModelSwapBinding> modelSwaps = new List<XestrelModelSwapBinding>();
     }
 }

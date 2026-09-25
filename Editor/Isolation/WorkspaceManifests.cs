@@ -45,6 +45,7 @@ namespace Xestrel.Isolation
                 b => new XestrelAnimatorBinding { original = b.original, copy = b.copy }, null, ref ignored);
             manifest.clipBindings = CloneList(state.clipBindings,
                 b => new XestrelClipBinding { original = b.original, copy = b.copy }, null, ref ignored);
+            manifest.modelSwaps = CloneList(state.modelSwaps, CloneModelSwap, null, ref ignored);
 
             var history = BuildHistoryIndex(manifest);
             foreach (var b in manifest.bindings)
@@ -150,6 +151,8 @@ namespace Xestrel.Isolation
             state.clipBindings = CloneList(manifest.clipBindings,
                 b => new XestrelClipBinding { original = b.original, copy = b.copy },
                 b => b.copy != null, ref dropped);
+            state.modelSwaps = CloneList(manifest.modelSwaps, CloneModelSwap,
+                b => b.swappedPrefab != null && b.originalPrefab != null, ref dropped);
 
             EditorUtility.SetDirty(state);
             Sync(state);
@@ -162,7 +165,18 @@ namespace Xestrel.Isolation
 
         private static bool HasAnyBinding(XestrelMaterialIsolation state) =>
             (state.bindings?.Count ?? 0) + (state.textureBindings?.Count ?? 0) +
-            (state.animatorBindings?.Count ?? 0) + (state.clipBindings?.Count ?? 0) > 0;
+            (state.animatorBindings?.Count ?? 0) + (state.clipBindings?.Count ?? 0) +
+            (state.modelSwaps?.Count ?? 0) > 0;
+
+        private static XestrelModelSwapBinding CloneModelSwap(XestrelModelSwapBinding b) =>
+            new XestrelModelSwapBinding
+            {
+                originalPrefab = b.originalPrefab,
+                swappedPrefab = b.swappedPrefab,
+                originalModel = b.originalModel,
+                newModel = b.newModel,
+                prefabCopies = new List<GameObject>(b.prefabCopies ?? new List<GameObject>()),
+            };
 
         private static XestrelWorkspaceManifest FindOrCreate(string avatarName)
         {

@@ -11,7 +11,7 @@ namespace Xestrel.Isolation
     /// Only materials are isolated in bulk; texture isolation is on-demand from the
     /// per-property "Isolate" button in the window (see <see cref="TextureIsolator.IsolateProperty"/>).
     /// Restore points the avatar's renderers / descriptor back at the originals and
-    /// clears every binding. It never writes into copy assets, which other avatars
+    /// clears every binding, including a model (FBX) swap. It never writes into copy assets, which other avatars
     /// sharing the workspace (unforked duplicates in other scenes) may still use.
     /// </summary>
     internal static class Isolator
@@ -28,6 +28,7 @@ namespace Xestrel.Isolation
             AnimatorIsolator.Restore(state);
             TextureIsolator.Restore(state);
             MaterialIsolator.Restore(state);
+            ModelSwapper.Restore(state);
             WorkspaceManifests.Sync(state);
             AssetDatabase.SaveAssets();
         }

@@ -167,6 +167,12 @@ namespace Xestrel.Isolation
                 foreach (var b in state.animatorBindings) { if (b != null && b.copy != null) set.Add(b.copy); }
             if (state.clipBindings != null)
                 foreach (var b in state.clipBindings) { if (b != null && b.copy != null) set.Add(b.copy); }
+            if (state.modelSwaps != null)
+                foreach (var b in state.modelSwaps)
+                {
+                    if (b?.prefabCopies == null) continue;
+                    foreach (var p in b.prefabCopies) if (p != null) set.Add(p);
+                }
         }
     }
 }
