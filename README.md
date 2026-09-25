@@ -40,7 +40,7 @@ Unity 2022.3 LTS、VRChat Avatars SDK 3.5+。NDMF / Modular Avatar / Avatar Opti
 **Window → Xestrel → FBX Swap**(または分離ウィンドウの **FBX 差し替え** ボタン)で、アバターの元になっている FBX を「ほぼ同じ」別の FBX に差し替えられます。元の FBX・新しい FBX・元の Prefab はどれも変更しないので、両方の FBX をプロジェクトに共存させたまま切り替えられます。
 
 1. **チェック**(読み取りのみ)で、何が引き継がれないかを確認します(下記)。
-2. **差し替える** を押すと、シーンのアバターと FBX の間にある Prefab Variant をすべて `Assets/Xestrel/<アバター名>/Prefabs/` にコピーし、コピー側だけベースを新しい FBX に差し替え(`PrefabUtility.ReplacePrefabAssetOfPrefabInstance`、階層で対応付け・オーバーライドはできる限り保持)、アバターをそのコピーに付け替えます。オーバーライドが元 FBX のサブアセット(メッシュ・Avatar 等)を直接参照していた場合は、新しい FBX の同名サブアセットに付け替えます。
+2. **差し替える** を押すと、シーンのアバターと FBX の間にある Prefab Variant を、新しい FBX をベースにしたバリアントとして `Assets/Xestrel/<アバター名>/Prefabs/` に作り直し、アバターをそちらに付け替えます。Unity はバリアントのベースを直接差し替えられないため、バリアントを一時シーンに置いて一段 Unpack し、`PrefabUtility.ReplacePrefabAssetOfPrefabInstance`(階層で対応付け・オーバーライドはできる限り保持)で新しい FBX に付け替えてから Prefab として保存しています。オーバーライドが元 FBX のサブアセット(メッシュ・Avatar 等)を直接参照していた場合は、新しい FBX の同名サブアセットに付け替えます。
 3. **FBX を元に戻す**(または **すべて元に戻す**)で、アバターを差し替え前の Prefab に戻します。Prefab コピーはディスクに残ります。シーン上で追加したもののうち、新しい FBX で親が見つからず外れたものは、元に戻しても復活しません(直後なら Undo で取り消せます)。
 
 チェックの内容:

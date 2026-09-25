@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEditor;
+using UnityEditor.SceneManagement;
 using UnityEngine;
 using Xestrel.Core;
 using Xestrel.Detection;
@@ -11,11 +12,9 @@ namespace Xestrel.Isolation
     /// Swaps the model (FBX) an avatar is built on for an "almost identical" one without
     /// touching either model or the avatar's original prefab variants:
     /// <list type="number">
-    /// <item>every prefab variant between the scene instance and the old model is copied
-    ///   into <c>Assets/Xestrel/&lt;AvatarName&gt;/Prefabs/</c>;</item>
-    /// <item>the copies are rebased, innermost first, onto the new model / the next copy
-    ///   (<see cref="PrefabUtility.ReplacePrefabAssetOfPrefabInstance(GameObject,GameObject,PrefabReplacingSettings,InteractionMode)"/>,
-    ///   matching objects by hierarchy and keeping every possible override);</item>
+    /// <item>every prefab variant between the scene instance and the old model is rebuilt,
+    ///   innermost first, as a variant of the new model / the next rebuilt copy under
+    ///   <c>Assets/Xestrel/&lt;AvatarName&gt;/Prefabs/</c> (see <see cref="BuildRebasedVariant"/>);</item>
     /// <item>the scene instance is pointed at the outermost copy the same way.</item>
     /// </list>
     /// Overrides that referenced the old model's sub-assets (mesh, Avatar …) directly are
@@ -103,21 +102,15 @@ namespace Xestrel.Isolation
                 if (variants.Count > 0 && XestrelPaths.EnsureDirectory(dir) == null)
                     throw new System.Exception("could not create " + dir);
 
-                foreach (var v in variants)
-                {
-                    var src = AssetDatabase.GetAssetPath(v);
-                    var dst = AssetDatabase.GenerateUniqueAssetPath(
-                        dir + "/" + XestrelPaths.SanitiseFileSegment(v.name) + "__xestrel.prefab");
-                    if (!AssetDatabase.CopyAsset(src, dst))
-                        throw new System.Exception($"prefab copy failed: {src} → {dst}");
-                    copies.Add(AssetDatabase.LoadAssetAtPath<GameObject>(dst));
-                }
-
+                // Innermost first: each variant is rebuilt on top of the previous result.
                 var oldModelPath = AssetDatabase.GetAssetPath(oldModel);
-                for (int i = copies.Count - 1; i >= 0; i--)
+                var newBase = newModel;
+                for (int i = variants.Count - 1; i >= 0; i--)
                 {
-                    var newBase = i == copies.Count - 1 ? newModel : copies[i + 1];
-                    Rebase(copies[i], newBase, oldModelPath, newModel);
+                    var dst = AssetDatabase.GenerateUniqueAssetPath(
+                        dir + "/" + XestrelPaths.SanitiseFileSegment(variants[i].name) + "__xestrel.prefab");
+                    newBase = BuildRebasedVariant(variants[i], newBase, dst, oldModelPath, newModel);
+                    copies.Insert(0, newBase);
                 }
             }
             catch (System.Exception ex)
@@ -195,19 +188,32 @@ namespace Xestrel.Isolation
             return true;
         }
 
-        private static void Rebase(GameObject prefabCopy, GameObject newBase, string oldModelPath, GameObject newModel)
+        /// <summary>
+        /// Save a new variant of <paramref name="newBase"/> at <paramref name="dstPath"/>
+        /// carrying <paramref name="variant"/>'s overrides and additions. Unity refuses to
+        /// replace the parent of a variant asset in place, so instead: instantiate the
+        /// variant in a preview scene, unpack its outermost root (leaving an instance of
+        /// its base with the variant's changes as instance overrides), replace that
+        /// instance's prefab asset, and save the result as a prefab.
+        /// </summary>
+        private static GameObject BuildRebasedVariant(GameObject variant, GameObject newBase, string dstPath,
+            string oldModelPath, GameObject newModel)
         {
-            var path = AssetDatabase.GetAssetPath(prefabCopy);
-            var root = PrefabUtility.LoadPrefabContents(path);
+            var scene = EditorSceneManager.NewPreviewScene();
             try
             {
-                PrefabUtility.ReplacePrefabAssetOfPrefabInstance(root, newBase, Settings, InteractionMode.AutomatedAction);
-                RemapModelReferences(root, oldModelPath, newModel, false);
-                PrefabUtility.SaveAsPrefabAsset(root, path);
+                var instance = (GameObject)PrefabUtility.InstantiatePrefab(variant, scene);
+                if (instance == null) throw new System.Exception($"could not instantiate {variant.name}");
+                PrefabUtility.UnpackPrefabInstance(instance, PrefabUnpackMode.OutermostRoot, InteractionMode.AutomatedAction);
+                PrefabUtility.ReplacePrefabAssetOfPrefabInstance(instance, newBase, Settings, InteractionMode.AutomatedAction);
+                RemapModelReferences(instance, oldModelPath, newModel, false);
+                var saved = PrefabUtility.SaveAsPrefabAsset(instance, dstPath, out var success);
+                if (!success || saved == null) throw new System.Exception($"could not save {dstPath}");
+                return saved;
             }
             finally
             {
-                PrefabUtility.UnloadPrefabContents(root);
+                EditorSceneManager.ClosePreviewScene(scene);
             }
         }
 

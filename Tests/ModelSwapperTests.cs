@@ -89,6 +89,30 @@ namespace Xestrel.Tests
         }
 
         [Test]
+        public void Swap_RebuildsEveryVariantInAChain()
+        {
+            // Variant of the variant (e.g. an outfit variant built on the vendor's variant).
+            Object.DestroyImmediate(_instance);
+            var tmp = (GameObject)PrefabUtility.InstantiatePrefab(_variant);
+            new GameObject("OuterAdd").transform.SetParent(tmp.transform.Find("Armature/Hips"));
+            var outer = PrefabUtility.SaveAsPrefabAsset(tmp, TestDir + "/Outer.prefab");
+            Object.DestroyImmediate(tmp);
+            _instance = (GameObject)PrefabUtility.InstantiatePrefab(outer);
+
+            Assert.That(ModelSwapper.Swap(_instance, _newModel), Is.True);
+
+            Assert.That(ModelSwapValidator.FindBaseModel(_instance), Is.SameAs(_newModel));
+            Assert.That(_instance.transform.Find("Armature/Hips/VariantAdd"), Is.Not.Null);
+            Assert.That(_instance.transform.Find("Armature/Hips/OuterAdd"), Is.Not.Null);
+            var swap = ModelSwapper.CurrentSwap(_instance.GetComponent<XestrelMaterialIsolation>());
+            Assert.That(swap.prefabCopies.Count, Is.EqualTo(2));
+            Assert.That(PrefabUtility.GetCorrespondingObjectFromSource(swap.prefabCopies[0]),
+                Is.SameAs(swap.prefabCopies[1]), "outer copy is based on the inner copy");
+            Assert.That(PrefabUtility.GetCorrespondingObjectFromSource(outer), Is.SameAs(_variant),
+                "the original chain is untouched");
+        }
+
+        [Test]
         public void Restore_PointsBackAtTheOriginalVariant()
         {
             ModelSwapper.Swap(_instance, _newModel);
