@@ -20,6 +20,11 @@ Thumbs.db
 # User-provided files for repro (never commit user data; see CLAUDE.md)
 temp
 temp.meta
+# ユーザー提供データの置き場。末尾のチルダは Unity にインポートさせないための
+# 慣習（Documentation~ / Samples~ と同じ）。このリポジトリはテスト用プロジェクト
+# からローカルパッケージとして参照されるので、チルダ無しの temp/ に置くと
+# 丸ごとテストプロジェクトに取り込まれてしまう。
+temp~
 
 # Meta files belong in version control (Unity convention).
 # Do not ignore *.meta.
