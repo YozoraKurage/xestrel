@@ -410,11 +410,18 @@ namespace Xestrel.UI
         {
             var rect = EditorGUILayout.GetControlRect(false, 28f);
             EditorGUI.DrawRect(rect, new Color(0f, 0f, 0f, 0.18f));
-            var labelRect = new Rect(rect.x + 10f, rect.y + 6f, rect.width - 90f, rect.height - 8f);
+            var labelRect = new Rect(rect.x + 10f, rect.y + 6f, rect.width - 190f, rect.height - 8f);
             GUI.Label(labelRect, "アセット専用化", EditorStyles.boldLabel);
             var btnRect = new Rect(rect.xMax - 70f, rect.y + 4f, 60f, rect.height - 8f);
+            var swapRect = new Rect(btnRect.x - 104f, btnRect.y, 100f, btnRect.height);
             using (new EditorGUI.DisabledScope(_avatar == null))
             {
+                if (GUI.Button(swapRect, new GUIContent("FBX 差し替え",
+                        "元になっている FBX を別の FBX に差し替えたとき、何が引き継がれないかをチェックします（読み取りのみ）"),
+                        EditorStyles.miniButton))
+                {
+                    XestrelModelSwapWindow.OpenFor(_avatar);
+                }
                 if (GUI.Button(btnRect, new GUIContent("依存関係",
                         "このアバターが参照しているアセットをツリー表示します"), EditorStyles.miniButton))
                 {
